@@ -29,10 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Agent returns structured data matching Pydantic models (no validation errors)
   3. Agent completes task without placeholder "NEEDS_PARSING" returns
   4. Debug artifacts (GIF recording, conversation logs) show successful navigation
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD during planning
+- [ ] 01-01-PLAN.md — Fix output_model_schema, task prompts, and error handling in amazon_scraper.py and electronics_buyer.py
+- [ ] 01-02-PLAN.md — Create test_scraper.py and verify end-to-end browser navigation with real order
 
 ### Phase 2: Amazon Data Extraction
 **Goal**: Extract real order/shipping data from Amazon pages
@@ -96,7 +97,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Browser Automation Fix | 0/TBD | Not started | - |
+| 1. Browser Automation Fix | 0/2 | Not started | - |
 | 2. Amazon Data Extraction | 0/TBD | Not started | - |
 | 3. Reliability Hardening | 0/TBD | Not started | - |
 | 4. ElectronicsBuyer Integration | 0/TBD | Not started | - |
