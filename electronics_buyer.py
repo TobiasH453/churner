@@ -88,8 +88,7 @@ class ElectronicsBuyerAgent:
                 raise RuntimeError(f"Deal submission agent returned no structured output. final_result={result.final_result()!r}")
             return structured
         finally:
-            if agent.browser:
-                await agent.browser.close()
+            await agent.close()
 
     async def submit_tracking(self, tracking_number: str, items: list) -> EBTrackingResult:
         """
@@ -135,5 +134,4 @@ class ElectronicsBuyerAgent:
                 raise RuntimeError(f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}")
             return structured
         finally:
-            if agent.browser:
-                await agent.browser.close()
+            await agent.close()

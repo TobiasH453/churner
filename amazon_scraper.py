@@ -95,8 +95,7 @@ class AmazonScraper:
                 raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")
             return structured
         finally:
-            if agent.browser:
-                await agent.browser.close()
+            await agent.close()
 
     async def scrape_shipping_confirmation(self, order_number: str) -> ShippingDetails:
         """
@@ -150,5 +149,4 @@ class AmazonScraper:
                 raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")
             return structured
         finally:
-            if agent.browser:
-                await agent.browser.close()
+            await agent.close()
