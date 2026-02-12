@@ -82,31 +82,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | TBD | Pending |
-| FIX-02 | TBD | Pending |
-| FIX-03 | TBD | Pending |
-| FIX-04 | TBD | Pending |
-| EXTRACT-01 | TBD | Pending |
-| EXTRACT-02 | TBD | Pending |
-| EXTRACT-03 | TBD | Pending |
-| EXTRACT-04 | TBD | Pending |
-| RELIABLE-01 | TBD | Pending |
-| RELIABLE-02 | TBD | Pending |
-| RELIABLE-03 | TBD | Pending |
-| RELIABLE-04 | TBD | Pending |
-| EB-01 | TBD | Pending |
-| EB-02 | TBD | Pending |
-| EB-03 | TBD | Pending |
-| SHEETS-01 | TBD | Pending |
-| SHEETS-02 | TBD | Pending |
-| NOTIFY-01 | TBD | Pending |
-| NOTIFY-02 | TBD | Pending |
+| FIX-01 | Phase 1 | Pending |
+| FIX-02 | Phase 1 | Pending |
+| FIX-03 | Phase 1 | Pending |
+| FIX-04 | Phase 1 | Pending |
+| EXTRACT-01 | Phase 2 | Pending |
+| EXTRACT-02 | Phase 2 | Pending |
+| EXTRACT-03 | Phase 2 | Pending |
+| EXTRACT-04 | Phase 2 | Pending |
+| RELIABLE-01 | Phase 3 | Pending |
+| RELIABLE-02 | Phase 3 | Pending |
+| RELIABLE-03 | Phase 3 | Pending |
+| RELIABLE-04 | Phase 3 | Pending |
+| EB-01 | Phase 4 | Pending |
+| EB-02 | Phase 4 | Pending |
+| EB-03 | Phase 4 | Pending |
+| SHEETS-01 | Phase 5 | Pending |
+| SHEETS-02 | Phase 5 | Pending |
+| NOTIFY-01 | Phase 5 | Pending |
+| NOTIFY-02 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19 (100% coverage)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after initial definition*
+*Last updated: 2026-02-12 after roadmap creation*
