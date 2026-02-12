@@ -50,41 +50,46 @@ class AmazonScraper:
         """
         logger.info(f"Scraping order confirmation for: {order_number}")
 
-        # Direct navigation to invoice - no clicking needed!
         invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
 
         task = f"""
-        Step 1: Navigate directly to {invoice_url}
+        IMPORTANT: Look at the screenshot of the page after EVERY action. Do NOT try to return data until you can actually see order information on the page.
 
-        Step 2: If you see a login/sign-in page instead of the invoice, log in first:
-        - Email: {self.amazon_email}
-        - Password: {self.amazon_password}
-        - Handle any 2FA/OTP if prompted (wait for user to complete it)
-        After logging in, navigate again to {invoice_url}
+        Step 1: Navigate to {invoice_url}
 
-        Step 3: Extract the following information from the invoice page:
+        Step 2: Look at the page screenshot. If you see a sign-in/login form:
+        a) Click on the email input field
+        b) Type: {self.amazon_email}
+        c) Click the "Continue" button
+        d) Click on the password input field
+        e) Type: {self.amazon_password}
+        f) Click the "Sign in" button
+        g) If you see a 2FA/OTP prompt, wait — the user will complete it manually
+        h) After login completes, navigate to {invoice_url}
+
+        Step 3: You should now see the Amazon invoice page with order details. Extract:
         - Items with quantities (e.g., "iPad 128GB Blue" x2)
         - Subtotal (before cashback/discounts)
         - Grand total (final amount charged)
         - Cashback percentage (usually 5% or 6%, look for rewards/cashback text)
         - Estimated delivery date
 
-        Return the data in structured format.
+        Only return structured data AFTER you can see the actual invoice page with items listed.
         """
 
-        # Load browser profile with saved session and randomized human-like timing
         browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR)
 
         agent = Agent(
             task=task,
             llm=self.llm,  # type: ignore[arg-type]
-            use_vision='auto',  # Use screenshots to read the page
-            max_actions_per_step=5,  # Navigate, possible login, read page
+            use_vision=True,
+            max_actions_per_step=5,
             browser_profile=browser_profile,
             output_model_schema=OrderDetails,
             generate_gif='./logs/agent.gif',
             save_conversation_path="./logs/agent_conversation.json",
-            max_failures=5,
+            max_failures=10,
+            max_steps=25,
             step_timeout=180,
         )
 
@@ -103,42 +108,47 @@ class AmazonScraper:
         """
         logger.info(f"Scraping shipping confirmation for: {order_number}")
 
-        # Direct navigation to order details page
         order_details_url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order_number}"
 
         task = f"""
-        Step 1: Navigate directly to {order_details_url}
+        IMPORTANT: Look at the screenshot of the page after EVERY action. Do NOT try to return data until you can actually see order/tracking information on the page.
 
-        Step 2: If you see a login/sign-in page instead of order details, log in first:
-        - Email: {self.amazon_email}
-        - Password: {self.amazon_password}
-        - Handle any 2FA/OTP if prompted (wait for user to complete it)
-        After logging in, navigate again to {order_details_url}
+        Step 1: Navigate to {order_details_url}
 
-        Step 3: On the order details page, find and extract:
+        Step 2: Look at the page screenshot. If you see a sign-in/login form:
+        a) Click on the email input field
+        b) Type: {self.amazon_email}
+        c) Click the "Continue" button
+        d) Click on the password input field
+        e) Type: {self.amazon_password}
+        f) Click the "Sign in" button
+        g) If you see a 2FA/OTP prompt, wait — the user will complete it manually
+        h) After login completes, navigate to {order_details_url}
+
+        Step 3: You should now see the Amazon order details page. Find and extract:
         - Tracking number
-        - Carrier (UPS, USPS, FedEx, etc.)
+        - Carrier (UPS, USPS, FedEx, Amazon Logistics, etc.)
         - Delivery/arrival date
         - Items in this shipment with quantities
 
         Step 4: If there's a "Track package" link, click it to get more tracking details.
 
-        Return the data in structured format.
+        Only return structured data AFTER you can see the actual order details page with tracking info.
         """
 
-        # Load browser profile with saved session and randomized human-like timing
         browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR)
 
         agent = Agent(
             task=task,
             llm=self.llm,  # type: ignore[arg-type]
-            use_vision='auto',
-            max_actions_per_step=5,  # May need to click "Track package" link
+            use_vision=True,
+            max_actions_per_step=5,
             browser_profile=browser_profile,
             output_model_schema=ShippingDetails,
             generate_gif='./logs/agent.gif',
             save_conversation_path="./logs/agent_conversation.json",
-            max_failures=5,
+            max_failures=10,
+            max_steps=25,
             step_timeout=180,
         )
 
