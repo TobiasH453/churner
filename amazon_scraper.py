@@ -56,7 +56,13 @@ class AmazonScraper:
         task = f"""
         Step 1: Navigate directly to {invoice_url}
 
-        Step 2: Extract the following information from the invoice page:
+        Step 2: If you see a login/sign-in page instead of the invoice, log in first:
+        - Email: {self.amazon_email}
+        - Password: {self.amazon_password}
+        - Handle any 2FA/OTP if prompted (wait for user to complete it)
+        After logging in, navigate again to {invoice_url}
+
+        Step 3: Extract the following information from the invoice page:
         - Items with quantities (e.g., "iPad 128GB Blue" x2)
         - Subtotal (before cashback/discounts)
         - Grand total (final amount charged)
@@ -73,7 +79,7 @@ class AmazonScraper:
             task=task,
             llm=self.llm,  # type: ignore[arg-type]
             use_vision='auto',  # Use screenshots to read the page
-            max_actions_per_step=3,  # Only needs to navigate and read page
+            max_actions_per_step=5,  # Navigate, possible login, read page
             browser_profile=browser_profile,
             output_model_schema=OrderDetails,
             generate_gif='./logs/agent.gif',
@@ -104,13 +110,19 @@ class AmazonScraper:
         task = f"""
         Step 1: Navigate directly to {order_details_url}
 
-        Step 2: On the order details page, find and extract:
+        Step 2: If you see a login/sign-in page instead of order details, log in first:
+        - Email: {self.amazon_email}
+        - Password: {self.amazon_password}
+        - Handle any 2FA/OTP if prompted (wait for user to complete it)
+        After logging in, navigate again to {order_details_url}
+
+        Step 3: On the order details page, find and extract:
         - Tracking number
         - Carrier (UPS, USPS, FedEx, etc.)
         - Delivery/arrival date
         - Items in this shipment with quantities
 
-        Step 3: If there's a "Track package" link, click it to get more tracking details.
+        Step 4: If there's a "Track package" link, click it to get more tracking details.
 
         Return the data in structured format.
         """
