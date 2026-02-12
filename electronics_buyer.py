@@ -8,6 +8,11 @@ from stealth_utils import create_stealth_profile
 
 os.makedirs("./logs", exist_ok=True)
 
+# Increase browser-use watchdog timeouts (default 30s is too short for initial profile load)
+os.environ.setdefault('TIMEOUT_BrowserStartEvent', '120')
+os.environ.setdefault('TIMEOUT_BrowserLaunchEvent', '120')
+os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
+
 # Path to persistent browser profile directory
 USER_DATA_DIR = "./data/browser-profile"
 
@@ -76,12 +81,15 @@ class ElectronicsBuyerAgent:
             max_failures=5,
         )
 
-        result = await agent.run()
-
-        structured = result.structured_output
-        if structured is None:
-            raise RuntimeError(f"Deal submission agent returned no structured output. final_result={result.final_result()!r}")
-        return structured
+        try:
+            result = await agent.run()
+            structured = result.structured_output
+            if structured is None:
+                raise RuntimeError(f"Deal submission agent returned no structured output. final_result={result.final_result()!r}")
+            return structured
+        finally:
+            if agent.browser:
+                await agent.browser.close()
 
     async def submit_tracking(self, tracking_number: str, items: list) -> EBTrackingResult:
         """
@@ -120,9 +128,12 @@ class ElectronicsBuyerAgent:
             max_failures=5,
         )
 
-        result = await agent.run()
-
-        structured = result.structured_output
-        if structured is None:
-            raise RuntimeError(f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}")
-        return structured
+        try:
+            result = await agent.run()
+            structured = result.structured_output
+            if structured is None:
+                raise RuntimeError(f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}")
+            return structured
+        finally:
+            if agent.browser:
+                await agent.browser.close()
