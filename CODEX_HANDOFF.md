@@ -55,6 +55,7 @@ Read these first when resuming:
 - New confirmed milestone: shipping flow extracted real Amazon tracking number and attempted EB submission; Amazon extraction no longer blocked.
 - Known external blocker: EB site submission endpoint currently returns repeated server error and may destabilize browser session; treat as non-Amazon blocker.
 - API behavior updated: preserve `amazon_data` even when EB submission fails (return `success=false`, `eb_result.success=false`, `errors` populated).
+- Shipping item extraction tightened: parser now targets `/dp/` and `/gp/product/` links in shipment context (around track controls) and drops recommendation/search/price-heavy noise strings.
 
 ## Immediate Next Task (Resume Path)
 

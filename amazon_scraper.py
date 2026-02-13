@@ -448,30 +448,96 @@ class AmazonScraper:
     async def _extract_items_from_order_page(self, page: Page) -> list[dict]:
         """
         Best-effort item extraction from order details page.
+        Prioritizes product links inside shipment/order containers and
+        aggressively filters recommendation/noise text.
         """
-        selectors = [
-            "a[href*='/dp/']",
-            "a.a-link-normal",
-            "[data-a-word-break='normal']",
-            ".a-truncate-cut",
-        ]
+        # Try extracting from nearest shipment container around "Track package" first.
+        extracted = await page.evaluate(
+            """
+            () => {
+              const bad = [
+                'buy it again',
+                'recommended',
+                'sponsored',
+                'customers also',
+                'inspired by',
+                'related to',
+                'search',
+                'order details',
+              ];
 
+              const clean = (s) => (s || '')
+                .replace(/\\s+/g, ' ')
+                .replace(/\\$\\s*\\d+[\\d,]*(?:\\.\\d{2})?/g, ' ')
+                .replace(/\\(\\$\\s*\\d+[\\d,]*(?:\\.\\d{2})?(?:\\/count)?\\)/gi, ' ')
+                .replace(/\\bQty\\s*:?\\s*\\d+\\b/gi, ' ')
+                .trim();
+
+              const isGood = (s) => {
+                const t = clean(s);
+                if (!t || t.length < 8) return false;
+                if (t.length > 180) return false;
+                const lower = t.toLowerCase();
+                if (bad.some((k) => lower.includes(k))) return false;
+                if (/[{}<>]/.test(t)) return false;
+                return true;
+              };
+
+              const uniq = [];
+              const seen = new Set();
+
+              const add = (text) => {
+                const t = clean(text);
+                if (!isGood(t)) return;
+                const key = t.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                uniq.push(t);
+              };
+
+              const productLinkSelector = "a[href*='/dp/'], a[href*='/gp/product/']";
+
+              // First attempt: around track-package controls (shipment context).
+              const trackControls = Array.from(document.querySelectorAll('a,button'))
+                .filter((el) => (el.textContent || '').toLowerCase().includes('track package'));
+
+              for (const control of trackControls) {
+                let container = control;
+                for (let i = 0; i < 8 && container && container.parentElement; i++) {
+                  container = container.parentElement;
+                  const links = container.querySelectorAll(productLinkSelector);
+                  if (links.length > 0) {
+                    links.forEach((a) => add(a.textContent || ''));
+                    if (uniq.length > 0) return uniq.slice(0, 10);
+                  }
+                }
+              }
+
+              // Second attempt: all product links, but filtered.
+              document.querySelectorAll(productLinkSelector).forEach((a) => add(a.textContent || ''));
+              return uniq.slice(0, 10);
+            }
+            """
+        )
+
+        if extracted:
+            return [{"name": name, "quantity": 1} for name in extracted]
+
+        # Final fallback: strict link-only extraction.
         names: list[str] = []
-        for selector in selectors:
-            if not await self._selector_exists(page, selector):
+        loc = page.locator("a[href*='/dp/'], a[href*='/gp/product/']")
+        count = min(await loc.count(), 40)
+        for i in range(count):
+            text = " ".join((await loc.nth(i).inner_text()).split())
+            if len(text) < 8 or len(text) > 180:
                 continue
-            loc = page.locator(selector)
-            count = min(await loc.count(), 40)
-            for i in range(count):
-                text = (await loc.nth(i).inner_text()).strip()
-                if len(text) < 6:
-                    continue
-                if any(skip in text.lower() for skip in ["track package", "buy it again", "order details"]):
-                    continue
-                if text not in names:
-                    names.append(text)
-            if names:
-                break
+            lower = text.lower()
+            if any(skip in lower for skip in ["buy it again", "recommended", "sponsored", "customers also", "search"]):
+                continue
+            if "$" in text:
+                continue
+            if text not in names:
+                names.append(text)
 
         return [{"name": name, "quantity": 1} for name in names[:10]]
 

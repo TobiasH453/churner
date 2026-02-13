@@ -83,6 +83,7 @@ None yet.
 - External dependency blocker confirmed: EB tracking submission currently fails server-side (`Failed to submit tracking numbers`) and can corrupt browser session afterward.
 - Response contract fix applied: on EB failure, API now preserves `amazon_data`, returns `eb_result.success=false`, and includes EB error in `errors` rather than nulling both payloads.
 - Login hardening update: added more passkey/alternate-auth selectors and broader OTP field selectors to reduce manual intervention on Amazon sign-in.
+- Amazon data quality fix in progress: shipping item extraction now prioritizes product links near shipment/track-package containers and filters recommendation/search/price noise that caused wrong item names.
 
 ## Session Continuity
 
