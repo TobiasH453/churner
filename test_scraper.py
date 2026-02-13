@@ -59,7 +59,7 @@ async def main():
         print(str(e))
         print("\nCheck debug artifacts:")
         print("  GIF: ./logs/agent.gif")
-        print("  Conversation: ./logs/agent_conversation.json")
+        print("  Conversation dir: ./logs/agent_conversations/")
     except Exception as e:
         print(f"\n=== UNEXPECTED ERROR ===")
         print(f"{type(e).__name__}: {e}")
@@ -67,7 +67,7 @@ async def main():
 
     print("\nDebug artifacts saved to:")
     print("  GIF recording: ./logs/agent.gif (if created)")
-    print("  LLM conversation: ./logs/agent_conversation.json (if created)")
+    print("  LLM conversation dir: ./logs/agent_conversations/ (if created)")
 
 if __name__ == "__main__":
     asyncio.run(main())

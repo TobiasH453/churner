@@ -7,6 +7,7 @@ from models import OrderDetails, ShippingDetails
 from utils import logger, get_env
 from typing import Union
 from stealth_utils import create_stealth_profile
+from runtime_checks import ensure_browser_runtime_compatibility
 
 os.makedirs("./logs", exist_ok=True)
 
@@ -32,9 +33,10 @@ class AnthropicWrapper:
 
 class AmazonScraper:
     def __init__(self):
+        ensure_browser_runtime_compatibility()
         # Create ChatAnthropic with wrapper for browser-use compatibility
         base_llm = ChatAnthropic(
-            model_name='claude-3-5-sonnet-20241022',
+            model_name='claude-sonnet-4-5-20250929',
             api_key=SecretStr(get_env('ANTHROPIC_API_KEY')),
             temperature=0.0,
             timeout=60,
@@ -87,7 +89,7 @@ class AmazonScraper:
             browser_profile=browser_profile,
             output_model_schema=OrderDetails,
             generate_gif='./logs/agent.gif',
-            save_conversation_path="./logs/agent_conversation.json",
+            save_conversation_path="./logs/agent_conversations",
             max_failures=10,
             max_steps=25,
             step_timeout=180,
@@ -95,6 +97,12 @@ class AmazonScraper:
 
         try:
             result = await agent.run()
+            errors = [err for err in result.errors() if err]
+            if errors:
+                raise RuntimeError(
+                    f"Agent failed during order scrape. last_error={errors[-1]!r} "
+                    f"final_result={result.final_result()!r}"
+                )
             structured = result.structured_output
             if structured is None:
                 raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")
@@ -146,7 +154,7 @@ class AmazonScraper:
             browser_profile=browser_profile,
             output_model_schema=ShippingDetails,
             generate_gif='./logs/agent.gif',
-            save_conversation_path="./logs/agent_conversation.json",
+            save_conversation_path="./logs/agent_conversations",
             max_failures=10,
             max_steps=25,
             step_timeout=180,
@@ -154,6 +162,12 @@ class AmazonScraper:
 
         try:
             result = await agent.run()
+            errors = [err for err in result.errors() if err]
+            if errors:
+                raise RuntimeError(
+                    f"Agent failed during shipping scrape. last_error={errors[-1]!r} "
+                    f"final_result={result.final_result()!r}"
+                )
             structured = result.structured_output
             if structured is None:
                 raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")

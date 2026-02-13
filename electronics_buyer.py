@@ -5,6 +5,7 @@ from pydantic import SecretStr
 from models import EBDealResult, EBTrackingResult
 from utils import logger, get_env
 from stealth_utils import create_stealth_profile
+from runtime_checks import ensure_browser_runtime_compatibility
 
 os.makedirs("./logs", exist_ok=True)
 
@@ -30,8 +31,9 @@ class AnthropicWrapper:
 
 class ElectronicsBuyerAgent:
     def __init__(self):
+        ensure_browser_runtime_compatibility()
         base_llm = ChatAnthropic(
-            model_name='claude-3-5-sonnet-20241022',
+            model_name='claude-sonnet-4-5-20250929',
             api_key=SecretStr(get_env('ANTHROPIC_API_KEY')),
             temperature=0.0,
             timeout=30,
@@ -77,12 +79,18 @@ class ElectronicsBuyerAgent:
             browser_profile=browser_profile,
             output_model_schema=EBDealResult,
             generate_gif='./logs/eb_agent.gif',
-            save_conversation_path="./logs/eb_agent_conversation.json",
+            save_conversation_path="./logs/eb_agent_conversations",
             max_failures=5,
         )
 
         try:
             result = await agent.run()
+            errors = [err for err in result.errors() if err]
+            if errors:
+                raise RuntimeError(
+                    f"Deal agent failed. last_error={errors[-1]!r} "
+                    f"final_result={result.final_result()!r}"
+                )
             structured = result.structured_output
             if structured is None:
                 raise RuntimeError(f"Deal submission agent returned no structured output. final_result={result.final_result()!r}")
@@ -123,12 +131,18 @@ class ElectronicsBuyerAgent:
             browser_profile=browser_profile,
             output_model_schema=EBTrackingResult,
             generate_gif='./logs/eb_agent.gif',
-            save_conversation_path="./logs/eb_agent_conversation.json",
+            save_conversation_path="./logs/eb_agent_conversations",
             max_failures=5,
         )
 
         try:
             result = await agent.run()
+            errors = [err for err in result.errors() if err]
+            if errors:
+                raise RuntimeError(
+                    f"Tracking agent failed. last_error={errors[-1]!r} "
+                    f"final_result={result.final_result()!r}"
+                )
             structured = result.structured_output
             if structured is None:
                 raise RuntimeError(f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}")
