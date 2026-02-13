@@ -1,12 +1,19 @@
 import asyncio
 import os
+import time
 from browser_use import Agent
 from langchain_anthropic import ChatAnthropic
+from playwright.async_api import Page, async_playwright
 from pydantic import SecretStr
 from models import OrderDetails, ShippingDetails
 from utils import logger, get_env
 from typing import Union
-from stealth_utils import create_stealth_profile
+from stealth_utils import (
+    STEALTH_BROWSER_ARGS,
+    STEALTH_IGNORE_DEFAULT_ARGS,
+    create_stealth_profile,
+    get_chromium_executable,
+)
 from runtime_checks import ensure_browser_runtime_compatibility
 
 os.makedirs("./logs", exist_ok=True)
@@ -46,6 +53,115 @@ class AmazonScraper:
         self.amazon_email = get_env('AMAZON_EMAIL', '')
         self.amazon_password = get_env('AMAZON_PASSWORD', '')
 
+    async def _selector_exists(self, page: Page, selector: str) -> bool:
+        return await page.locator(selector).count() > 0
+
+    async def _click_first(self, page: Page, selectors: list[str]) -> bool:
+        for selector in selectors:
+            if await self._selector_exists(page, selector):
+                await page.locator(selector).first.click()
+                return True
+        return False
+
+    async def _fill_first(self, page: Page, selectors: list[str], value: str) -> bool:
+        for selector in selectors:
+            if await self._selector_exists(page, selector):
+                await page.locator(selector).first.fill(value)
+                return True
+        return False
+
+    async def _is_sign_in_page(self, page: Page) -> bool:
+        if "ap/signin" in page.url:
+            return True
+        return any(
+            [
+                await self._selector_exists(page, "#ap_email"),
+                await self._selector_exists(page, "input[name='email']"),
+                await self._selector_exists(page, "#ap_password"),
+                await self._selector_exists(page, "input[name='password']"),
+            ]
+        )
+
+    async def _is_mfa_page(self, page: Page) -> bool:
+        if "ap/mfa" in page.url:
+            return True
+        return any(
+            [
+                await self._selector_exists(page, "input[name='otpCode']"),
+                await self._selector_exists(page, "input[name='cvf_captcha_input']"),
+                await self._selector_exists(page, "#auth-mfa-otpcode"),
+            ]
+        )
+
+    async def _wait_for_auth_completion(self, page: Page, timeout_seconds: int = 180) -> None:
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if not await self._is_sign_in_page(page) and not await self._is_mfa_page(page):
+                return
+            await asyncio.sleep(2)
+        raise RuntimeError("Amazon login did not complete within 180 seconds. Still on auth page.")
+
+    async def _prime_amazon_session(self, target_url: str) -> None:
+        """
+        Deterministic login/session priming before agent run.
+        This removes login responsibilities from the LLM agent.
+        """
+        if not self.amazon_email or not self.amazon_password:
+            raise RuntimeError("Missing AMAZON_EMAIL or AMAZON_PASSWORD for session priming.")
+
+        logger.info(f"Priming Amazon session for target URL: {target_url}")
+        chromium_path = get_chromium_executable()
+
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=USER_DATA_DIR,
+                headless=False,
+                executable_path=chromium_path,
+                args=STEALTH_BROWSER_ARGS,
+                ignore_default_args=STEALTH_IGNORE_DEFAULT_ARGS,
+            )
+
+            try:
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto(target_url, wait_until="domcontentloaded")
+                await asyncio.sleep(1)
+
+                if await self._is_sign_in_page(page):
+                    logger.info("Amazon sign-in detected. Performing deterministic login sequence...")
+
+                    email_filled = await self._fill_first(
+                        page,
+                        ["#ap_email", "input[name='email']", "input[type='email']"],
+                        self.amazon_email,
+                    )
+                    if not email_filled:
+                        raise RuntimeError("Could not find Amazon email input field.")
+
+                    await self._click_first(page, ["#continue", "input#continue", "input[name='continue']"])
+                    await asyncio.sleep(1)
+
+                    password_filled = await self._fill_first(
+                        page,
+                        ["#ap_password", "input[name='password']", "input[type='password']"],
+                        self.amazon_password,
+                    )
+                    if not password_filled:
+                        raise RuntimeError("Could not find Amazon password input field.")
+
+                    await self._click_first(page, ["#signInSubmit", "input#signInSubmit"])
+
+                    if await self._is_mfa_page(page):
+                        logger.warning(
+                            "Amazon 2FA detected. Complete the challenge in the browser window; "
+                            "waiting up to 180 seconds."
+                        )
+
+                    await self._wait_for_auth_completion(page, timeout_seconds=180)
+                    await page.goto(target_url, wait_until="domcontentloaded")
+                    await asyncio.sleep(1)
+            finally:
+                await context.close()
+
     async def scrape_order_confirmation(self, order_number: str) -> OrderDetails:
         """
         Navigate to Amazon invoice page and extract order details
@@ -54,20 +170,18 @@ class AmazonScraper:
 
         invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
 
+        # Ensure login/session is ready before the LLM agent starts extracting.
+        await self._prime_amazon_session(invoice_url)
+
         task = f"""
-        IMPORTANT: Look at the screenshot of the page after EVERY action. Do NOT try to return data until you can actually see order information on the page.
+        IMPORTANT: Session is already authenticated. Do NOT attempt login.
+        Look at the screenshot after every action. Do not return data until you can
+        actually see order information on the page.
 
         Step 1: Navigate to {invoice_url}
 
-        Step 2: Look at the page screenshot. If you see a sign-in/login form:
-        a) Click on the email input field
-        b) Type: {self.amazon_email}
-        c) Click the "Continue" button
-        d) Click on the password input field
-        e) Type: {self.amazon_password}
-        f) Click the "Sign in" button
-        g) If you see a 2FA/OTP prompt, wait — the user will complete it manually
-        h) After login completes, navigate to {invoice_url}
+        Step 2: If sign-in page appears, navigate to {invoice_url} once more.
+        If sign-in still appears after retry, stop and do not fabricate data.
 
         Step 3: You should now see the Amazon invoice page with order details. Extract:
         - Items with quantities (e.g., "iPad 128GB Blue" x2)
@@ -118,20 +232,18 @@ class AmazonScraper:
 
         order_details_url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order_number}"
 
+        # Ensure login/session is ready before the LLM agent starts extracting.
+        await self._prime_amazon_session(order_details_url)
+
         task = f"""
-        IMPORTANT: Look at the screenshot of the page after EVERY action. Do NOT try to return data until you can actually see order/tracking information on the page.
+        IMPORTANT: Session is already authenticated. Do NOT attempt login.
+        Look at the screenshot after every action. Do not return data until you can
+        actually see order/tracking information on the page.
 
         Step 1: Navigate to {order_details_url}
 
-        Step 2: Look at the page screenshot. If you see a sign-in/login form:
-        a) Click on the email input field
-        b) Type: {self.amazon_email}
-        c) Click the "Continue" button
-        d) Click on the password input field
-        e) Type: {self.amazon_password}
-        f) Click the "Sign in" button
-        g) If you see a 2FA/OTP prompt, wait — the user will complete it manually
-        h) After login completes, navigate to {order_details_url}
+        Step 2: If sign-in page appears, navigate to {order_details_url} once more.
+        If sign-in still appears after retry, stop and do not fabricate data.
 
         Step 3: You should now see the Amazon order details page. Find and extract:
         - Tracking number

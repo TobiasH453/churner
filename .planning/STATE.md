@@ -69,6 +69,7 @@ None yet.
 - Stabilization in progress: improved runtime diagnostics, debug mode (`--debug`), and conversation artifact paths to capture root-cause details on next run.
 - Root-cause drift identified: long-running server process on port 8080 was still using old in-memory code path (old prompts/model + placeholder fallback behavior).
 - Guard added in `browser_agent.py` to fail fast if payload contains placeholder markers (`NEEDS_PARSING`, `TBD`) so API can never report success=true with fake data.
+- Login/extraction decoupling added: `amazon_scraper.py` now primes authenticated session with deterministic Playwright actions before invoking browser-use Agent.
 
 ## Session Continuity
 

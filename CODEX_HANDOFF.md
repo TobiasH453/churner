@@ -42,6 +42,7 @@ Read these first when resuming:
 - Browser/agent behavior was improved in prior commits, but acceptance is not yet formally closed in `.planning` (no `01-02-SUMMARY.md` present).
 - A stale long-running server process on port `8080` was observed serving old code in memory. Restart is required after code changes.
 - `browser_agent.py` now includes a placeholder guard that forces failure if payload contains `NEEDS_PARSING`/`TBD`.
+- `amazon_scraper.py` now performs deterministic Playwright login/session priming before LLM extraction, so login is no longer left to model behavior.
 
 ## Immediate Next Task (Resume Path)
 
