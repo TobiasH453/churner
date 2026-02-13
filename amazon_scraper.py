@@ -1,12 +1,15 @@
 import asyncio
+import json
 import os
 import time
+from typing import Any
 from browser_use import Agent
 from browser_use.llm import ChatAnthropic
 from playwright.async_api import Page, async_playwright
 from models import OrderDetails, ShippingDetails
 from utils import logger, get_env
 from typing import Union
+from pydantic import ValidationError
 from stealth_utils import (
     STEALTH_BROWSER_ARGS,
     STEALTH_IGNORE_DEFAULT_ARGS,
@@ -245,6 +248,119 @@ class AmazonScraper:
             finally:
                 await context.close()
 
+    @staticmethod
+    def _extract_first_json_object(text: str) -> str | None:
+        """
+        Extract the first balanced JSON object from a mixed string.
+        """
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escape = False
+
+        for i in range(start, len(text)):
+            ch = text[i]
+
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+
+        return None
+
+    @staticmethod
+    def _clean_json_candidate(raw: str) -> str:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            # Remove optional leading 'json' label after fences.
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+        return cleaned
+
+    def _recover_structured_output(self, raw_output: Any, model_cls: type[OrderDetails] | type[ShippingDetails]) -> OrderDetails | ShippingDetails | None:
+        """
+        Recover structured output when model returns JSON plus trailing text.
+        """
+        if raw_output is None:
+            return None
+
+        if isinstance(raw_output, dict):
+            return model_cls.model_validate(raw_output)
+
+        if not isinstance(raw_output, str):
+            return None
+
+        candidate = self._clean_json_candidate(raw_output)
+
+        # First try direct JSON parse.
+        try:
+            return model_cls.model_validate_json(candidate)
+        except Exception:
+            pass
+
+        # Fallback: extract the first balanced JSON object.
+        obj_text = self._extract_first_json_object(candidate)
+        if not obj_text:
+            return None
+
+        try:
+            parsed = json.loads(obj_text)
+            return model_cls.model_validate(parsed)
+        except Exception:
+            return None
+
+    def _get_validated_structured_output(
+        self,
+        result: Any,
+        model_cls: type[OrderDetails] | type[ShippingDetails],
+        context_label: str,
+    ) -> OrderDetails | ShippingDetails:
+        """
+        Get validated structured output with recovery from common JSON formatting drift.
+        """
+        try:
+            structured = result.structured_output
+        except ValidationError as exc:
+            logger.warning(
+                "Structured output validation failed for %s; attempting recovery from final_result. Error: %s",
+                context_label,
+                exc,
+            )
+            recovered = self._recover_structured_output(result.final_result(), model_cls)
+            if recovered is not None:
+                logger.info("Recovered structured output for %s from raw final_result JSON.", context_label)
+                return recovered
+            raise RuntimeError(
+                f"Structured output validation failed for {context_label}: {exc}. "
+                f"final_result={result.final_result()!r}"
+            ) from exc
+
+        if structured is None:
+            recovered = self._recover_structured_output(result.final_result(), model_cls)
+            if recovered is not None:
+                logger.info("Recovered missing structured output for %s from raw final_result JSON.", context_label)
+                return recovered
+            raise RuntimeError(f"Agent returned no structured output for {context_label}. final_result={result.final_result()!r}")
+
+        return structured
+
     async def scrape_order_confirmation(self, order_number: str) -> OrderDetails:
         """
         Navigate to Amazon invoice page and extract order details
@@ -300,9 +416,7 @@ class AmazonScraper:
                     f"Agent failed during order scrape. last_error={errors[-1]!r} "
                     f"final_result={result.final_result()!r}"
                 )
-            structured = result.structured_output
-            if structured is None:
-                raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")
+            structured = self._get_validated_structured_output(result, OrderDetails, f"order {order_number}")
             return structured
         finally:
             await agent.close()
@@ -363,9 +477,7 @@ class AmazonScraper:
                     f"Agent failed during shipping scrape. last_error={errors[-1]!r} "
                     f"final_result={result.final_result()!r}"
                 )
-            structured = result.structured_output
-            if structured is None:
-                raise RuntimeError(f"Agent returned no structured output for order {order_number}. final_result={result.final_result()!r}")
+            structured = self._get_validated_structured_output(result, ShippingDetails, f"shipping {order_number}")
             return structured
         finally:
             await agent.close()

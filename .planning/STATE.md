@@ -75,6 +75,7 @@ None yet.
 - Fix applied: switched runtime agents to `browser_use.llm.ChatAnthropic` and hardened sign-in flow when password field is delayed/passkey-interrupted.
 - Latest failure after login confirmed: Anthropic request rejected with `401 invalid x-api-key`.
 - Runtime hardening added in `utils.py`: `.env` now loads with `override=True`; key values are trimmed/unquoted; `ANTHROPIC_API_KEY` fails fast with a clear validation error if malformed.
+- New extraction hardening: when browser-use returns JSON with trailing text, `amazon_scraper.py` now attempts recovery by extracting the first balanced JSON object and validating against `ShippingDetails`/`OrderDetails` before failing.
 
 ## Session Continuity
 
