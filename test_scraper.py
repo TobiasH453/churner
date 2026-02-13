@@ -11,8 +11,8 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env
-load_dotenv()
+# Load environment variables from .env (override stale shell exports)
+load_dotenv(override=True)
 
 from amazon_scraper import AmazonScraper
 

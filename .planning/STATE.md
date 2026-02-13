@@ -73,6 +73,8 @@ None yet.
 - Optional automatic 2FA added: if `AMAZON_TOTP_SECRET` is set in `.env`, scraper attempts TOTP code entry on Amazon MFA pages before falling back to manual input.
 - New root cause confirmed from logs: `AttributeError: items` came from using `langchain_anthropic.ChatAnthropic` with browser-use token wrapper calling `ainvoke(messages, output_format, ...)`.
 - Fix applied: switched runtime agents to `browser_use.llm.ChatAnthropic` and hardened sign-in flow when password field is delayed/passkey-interrupted.
+- Latest failure after login confirmed: Anthropic request rejected with `401 invalid x-api-key`.
+- Runtime hardening added in `utils.py`: `.env` now loads with `override=True`; key values are trimmed/unquoted; `ANTHROPIC_API_KEY` fails fast with a clear validation error if malformed.
 
 ## Session Continuity
 

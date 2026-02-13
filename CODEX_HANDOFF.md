@@ -46,6 +46,8 @@ Read these first when resuming:
 - Latest verified failure from real logs: agent reached Amazon order-details URL, then failed with `AttributeError: items` inside `langchain_core` config handling.
 - Root cause patch now in repo: runtime agents use `browser_use.llm.ChatAnthropic` (compatible `ainvoke(messages, output_format, ...)`) instead of `langchain_anthropic` wrapper.
 - Login priming now also handles delayed password step and passkey interruption before raising.
+- Additional blocker discovered from latest run: Anthropic API call failed with `401 invalid x-api-key`.
+- Mitigation now in code: env loading uses `load_dotenv(override=True)` and `get_env('ANTHROPIC_API_KEY')` validates format/length to fail immediately with actionable error.
 
 ## Immediate Next Task (Resume Path)
 
