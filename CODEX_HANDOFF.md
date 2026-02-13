@@ -40,6 +40,8 @@ Read these first when resuming:
 - GSD planning docs still show Phase 1 / Plan 02 pending human verification.
 - `test_scraper.py` exists and supports testing order/shipping flows.
 - Browser/agent behavior was improved in prior commits, but acceptance is not yet formally closed in `.planning` (no `01-02-SUMMARY.md` present).
+- A stale long-running server process on port `8080` was observed serving old code in memory. Restart is required after code changes.
+- `browser_agent.py` now includes a placeholder guard that forces failure if payload contains `NEEDS_PARSING`/`TBD`.
 
 ## Immediate Next Task (Resume Path)
 
@@ -67,6 +69,22 @@ Execute **Phase 1 / Plan 02** acceptance exactly as the active plan expects:
    - Create `.planning/phases/01-browser-automation-fix/01-02-SUMMARY.md`
    - Update `.planning/STATE.md` current position/progress
    - Update Phase 1 completion state in `.planning/ROADMAP.md`
+
+## Mandatory Before Next Verification
+
+Restart the API process so latest code is loaded:
+
+```bash
+# find current listener
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+
+# stop stale process (example PID 2669)
+kill <PID>
+
+# start fresh server from this repo
+source venv314/bin/activate
+python main.py
+```
 
 ## Environment Requirements (for next run)
 
