@@ -45,9 +45,9 @@ Read these first when resuming:
 
 Execute **Phase 1 / Plan 02** acceptance exactly as the active plan expects:
 
-0. Rebuild runtime on Python 3.9 first (recommended due Python 3.14 compatibility warning):
+0. Rebuild runtime on Python 3.14 (or current active Python >=3.11):
    - `./scripts/rebuild_py39_env.sh`
-   - `source venv39/bin/activate`
+   - `source venv314/bin/activate`
 
 1. Run a real verification:
    - `python test_scraper.py shipping <REAL_ORDER_NUMBER>`
@@ -90,7 +90,7 @@ Execute **Phase 1 / Plan 02** acceptance exactly as the active plan expects:
 ```bash
 cd /Users/pinkpanther/Desktop/amazon-email-automation
 ./scripts/rebuild_py39_env.sh
-source venv39/bin/activate
+source venv314/bin/activate
 python test_scraper.py shipping <REAL_ORDER_NUMBER>
 # if needed:
 python test_debug.py <REAL_ORDER_NUMBER>

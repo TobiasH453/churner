@@ -18,9 +18,9 @@ def ensure_browser_runtime_compatibility() -> None:
     if sys.version_info >= (3, 14):
         logger.warning(
             "Python %s detected. browser-use + langchain-core currently emit "
-            "compatibility warnings on Python 3.14+, which can surface as "
-            "agent step failures (for example repeated 'items' errors). "
-            "Recommended runtime: Python 3.9-3.13.",
+            "compatibility warnings on Python 3.14+ in some environments. "
+            "Continuing on 3.14, but if you see repeated step failures "
+            "(for example 'items'), run with DEBUG logging to capture full traces.",
             ".".join(map(str, sys.version_info[:3])),
         )
 

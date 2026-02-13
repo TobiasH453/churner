@@ -7,6 +7,7 @@ Usage:
 import asyncio
 import sys
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -18,6 +19,20 @@ from amazon_scraper import AmazonScraper
 async def main():
     # Parse arguments: test_scraper.py [order|shipping] ORDER_NUMBER
     args = sys.argv[1:]
+    debug = False
+
+    if "--debug" in args:
+        debug = True
+        args = [a for a in args if a != "--debug"]
+
+    if debug:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(name)s %(levelname)s %(message)s",
+        )
+        logging.getLogger("Agent").setLevel(logging.DEBUG)
+        logging.getLogger("browser_use").setLevel(logging.DEBUG)
+        print("DEBUG logging enabled for Agent/browser_use.")
 
     if len(args) >= 2:
         mode = args[0]

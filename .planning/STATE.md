@@ -65,8 +65,8 @@ None yet.
 **Remaining Phase 1 work:**
 - 01-02: (pending - next plan in phase)
 - User-reported blocker: agent opens Amazon login page, performs no interactions, then closes.
-- Observed environment drift: active venv runs Python 3.14.3 with LangChain warning about Pydantic v1 compatibility on 3.14+.
-- Stabilization in progress: improved runtime diagnostics and conversation artifact paths to capture root-cause details on next run.
+- Active runtime: Python 3.14.3 (user-confirmed). Continue on 3.14 with enhanced diagnostics.
+- Stabilization in progress: improved runtime diagnostics, debug mode (`--debug`), and conversation artifact paths to capture root-cause details on next run.
 
 ## Session Continuity
 
