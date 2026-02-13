@@ -86,6 +86,9 @@ None yet.
 - Amazon data quality fix in progress: shipping item extraction now prioritizes product links near shipment/track-package containers and filters recommendation/search/price noise that caused wrong item names.
 - Extraction ordering fix applied: shipping fallback now extracts item names from order summary context first, then extracts tracking info after optional Track Package navigation.
 - EB token/cost control fix applied: tracking submission agent now fails fast (`max_failures=1`, `max_steps=8`, 45s hard timeout, no judge/planning) to avoid long retry loops on known EB server errors.
+- Order-flow parity applied: order confirmation now uses deterministic sign-in + extraction as primary path (same pattern as shipping), with LLM as fallback.
+- EB deal submission now also fails fast (single-failure tolerance, low step cap, short timeout, no judge/planning) and recovers JSON from trailing-text outputs.
+- Confirmed response contract target: keep Amazon scraped payload even when EB deal/tracking submission fails.
 
 ## Session Continuity
 

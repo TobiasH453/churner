@@ -438,12 +438,59 @@ class AmazonScraper:
         patterns = [
             r"(?:Arriving|Delivered|Delivery by|Expected by|Arrives)\s+([A-Za-z]{3,9}\s+\d{1,2}(?:,\s+\d{4})?)",
             r"(?:Arriving|Delivered)\s+([A-Za-z]{3,9}\s+\d{1,2})",
+            r"(?:Estimated arrival|Estimated delivery)\s+([A-Za-z]{3,9}\s+\d{1,2}(?:,\s+\d{4})?)",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
                 return match.group(1).strip()
         return None
+
+    @staticmethod
+    def _normalize_money(value: str) -> str:
+        cleaned = re.sub(r"\s+", "", value)
+        if not cleaned.startswith("$"):
+            cleaned = f"${cleaned}"
+        return cleaned
+
+    def _extract_order_totals(self, text: str) -> tuple[str, str]:
+        collapsed = " ".join(text.split())
+
+        def find_amount(labels_regex: str) -> str | None:
+            pattern = rf"(?:{labels_regex})[^$]{{0,60}}(\$\s?\d[\d,]*(?:\.\d{{2}})?)"
+            m = re.search(pattern, collapsed, flags=re.IGNORECASE)
+            return self._normalize_money(m.group(1)) if m else None
+
+        subtotal = find_amount(r"Item\(s\)\s*Subtotal|Subtotal")
+        grand_total = find_amount(r"Grand\s*Total|Order\s*Total|Total")
+
+        all_amounts = [self._normalize_money(v) for v in re.findall(r"\$\s?\d[\d,]*(?:\.\d{2})?", collapsed)]
+        if subtotal is None and all_amounts:
+            subtotal = all_amounts[0]
+        if grand_total is None and all_amounts:
+            grand_total = all_amounts[-1]
+
+        if subtotal is None:
+            subtotal = "$0.00"
+        if grand_total is None:
+            grand_total = subtotal
+
+        return subtotal, grand_total
+
+    @staticmethod
+    def _extract_cashback_percent(text: str) -> float:
+        patterns = [
+            r"(\d+(?:\.\d+)?)\s*%\s*(?:cashback|back|reward)",
+            r"(?:cashback|reward)[^\d]{0,20}(\d+(?:\.\d+)?)\s*%",
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, text, flags=re.IGNORECASE)
+            if m:
+                try:
+                    return float(m.group(1))
+                except Exception:
+                    pass
+        return 0.0
 
     async def _extract_items_from_order_page(self, page: Page, order_number: str) -> list[dict]:
         """
@@ -619,6 +666,49 @@ class AmazonScraper:
             finally:
                 await context.close()
 
+    async def _scrape_order_fallback(self, order_number: str) -> OrderDetails:
+        """
+        Deterministic Playwright extraction for order confirmation/invoice details.
+        """
+        invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
+        chromium_path = get_chromium_executable()
+
+        logger.warning("Using deterministic fallback order scrape for order %s", order_number)
+
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=USER_DATA_DIR,
+                headless=False,
+                executable_path=chromium_path,
+                args=STEALTH_BROWSER_ARGS,
+                ignore_default_args=STEALTH_IGNORE_DEFAULT_ARGS,
+            )
+            try:
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto(invoice_url, wait_until="domcontentloaded")
+                await asyncio.sleep(2)
+
+                await self._perform_sign_in_if_needed(page, invoice_url)
+                if await self._is_sign_in_page(page):
+                    raise RuntimeError("Order fallback still on sign-in page after deterministic login attempt.")
+
+                body_text = await page.locator("body").inner_text()
+                items = await self._extract_items_from_order_page(page, order_number)
+                subtotal, grand_total = self._extract_order_totals(body_text)
+                cashback_percent = self._extract_cashback_percent(body_text)
+                arrival_date = self._extract_delivery_date(body_text) or "Unknown"
+
+                return OrderDetails(
+                    items=items,
+                    total_before_cashback=subtotal,
+                    grand_total=grand_total,
+                    cashback_percent=cashback_percent,
+                    arrival_date=arrival_date,
+                    invoice_url=invoice_url,
+                )
+            finally:
+                await context.close()
+
     async def scrape_order_confirmation(self, order_number: str) -> OrderDetails:
         """
         Navigate to Amazon invoice page and extract order details
@@ -627,7 +717,16 @@ class AmazonScraper:
 
         invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
 
-        # Ensure login/session is ready before the LLM agent starts extracting.
+        # Primary path: deterministic sign-in + extraction in one context.
+        try:
+            return await self._scrape_order_fallback(order_number)
+        except Exception as primary_exc:
+            logger.warning(
+                "Deterministic order scrape primary path failed: %r. Falling back to LLM extraction path.",
+                primary_exc,
+            )
+
+        # Secondary path: ensure login/session is ready before the LLM agent starts extracting.
         await self._prime_amazon_session(invoice_url)
 
         task = f"""
@@ -670,11 +769,27 @@ class AmazonScraper:
             result = await agent.run()
             errors = [err for err in result.errors() if err]
             if errors:
-                raise RuntimeError(
-                    f"Agent failed during order scrape. last_error={errors[-1]!r} "
-                    f"final_result={result.final_result()!r}"
+                logger.warning(
+                    "LLM order scrape failed (last_error=%r). Trying deterministic fallback.",
+                    errors[-1],
                 )
+                try:
+                    return await self._scrape_order_fallback(order_number)
+                except Exception as fallback_exc:
+                    raise RuntimeError(
+                        f"Agent failed during order scrape. last_error={errors[-1]!r} "
+                        f"final_result={result.final_result()!r} fallback_error={fallback_exc!r}"
+                    ) from fallback_exc
             structured = self._get_validated_structured_output(result, OrderDetails, f"order {order_number}")
+            if not structured.items:
+                logger.warning("LLM order scrape returned empty items. Trying deterministic fallback.")
+                try:
+                    return await self._scrape_order_fallback(order_number)
+                except Exception as fallback_exc:
+                    raise RuntimeError(
+                        f"Order scrape returned empty items and fallback failed: {fallback_exc!r}. "
+                        f"final_result={result.final_result()!r}"
+                    ) from fallback_exc
             return structured
         finally:
             await agent.close()

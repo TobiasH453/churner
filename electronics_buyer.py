@@ -54,7 +54,10 @@ class ElectronicsBuyerAgent:
            - Submit the commitment
            - Note the payout value per unit (shown on the deal card)
         4. Calculate total cashout: sum of (payout_per_unit × quantity) for all items
-        5. Return the deal confirmation and total payout value
+        5. Wait briefly for result.
+           - If you see any error/failed message, STOP immediately and return success=false with the error text.
+           - Do NOT retry submission more than once.
+        6. Return success confirmation only if a real success confirmation is visible.
         """
 
         # Load browser profile with saved session and randomized human-like timing
@@ -69,20 +72,49 @@ class ElectronicsBuyerAgent:
             output_model_schema=EBDealResult,
             generate_gif='./logs/eb_agent.gif',
             save_conversation_path="./logs/eb_agent_conversations",
-            max_failures=5,
+            max_failures=1,
+            max_steps=10,
+            step_timeout=60,
+            use_judge=False,
+            enable_planning=False,
+            final_response_after_failure=False,
         )
 
         try:
-            result = await agent.run()
+            try:
+                result = await asyncio.wait_for(agent.run(), timeout=50)
+            except asyncio.TimeoutError:
+                return EBDealResult(
+                    success=False,
+                    deal_id=None,
+                    payout_value=0.0,
+                    error_message="EB deal submission timed out after 50s",
+                )
+
             errors = [err for err in result.errors() if err]
             if errors:
-                raise RuntimeError(
-                    f"Deal agent failed. last_error={errors[-1]!r} "
-                    f"final_result={result.final_result()!r}"
+                return EBDealResult(
+                    success=False,
+                    deal_id=None,
+                    payout_value=0.0,
+                    error_message=f"Deal agent failed fast: {errors[-1]}",
                 )
-            structured = result.structured_output
+
+            try:
+                structured = result.structured_output
+            except ValidationError:
+                structured = None
+
             if structured is None:
-                raise RuntimeError(f"Deal submission agent returned no structured output. final_result={result.final_result()!r}")
+                recovered = self._recover_deal_output(result.final_result())
+                if recovered is not None:
+                    return recovered
+                return EBDealResult(
+                    success=False,
+                    deal_id=None,
+                    payout_value=0.0,
+                    error_message=f"Deal submission agent returned no structured output. final_result={result.final_result()!r}",
+                )
             return structured
         finally:
             await agent.close()
@@ -223,5 +255,35 @@ class ElectronicsBuyerAgent:
             return None
         try:
             return EBTrackingResult.model_validate(json.loads(obj_text))
+        except Exception:
+            return None
+
+    def _recover_deal_output(self, raw_output) -> EBDealResult | None:
+        if raw_output is None:
+            return None
+        if isinstance(raw_output, dict):
+            try:
+                return EBDealResult.model_validate(raw_output)
+            except Exception:
+                return None
+        if not isinstance(raw_output, str):
+            return None
+
+        candidate = raw_output.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.strip("`")
+            if candidate.lower().startswith("json"):
+                candidate = candidate[4:].strip()
+
+        try:
+            return EBDealResult.model_validate_json(candidate)
+        except Exception:
+            pass
+
+        obj_text = self._extract_first_json_object(candidate)
+        if not obj_text:
+            return None
+        try:
+            return EBDealResult.model_validate(json.loads(obj_text))
         except Exception:
             return None

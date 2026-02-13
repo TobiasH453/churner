@@ -58,6 +58,9 @@ Read these first when resuming:
 - Shipping item extraction tightened: parser now targets `/dp/` and `/gp/product/` links in shipment context (around track controls) and drops recommendation/search/price-heavy noise strings.
 - Shipping extraction now explicitly does items-first from order summary context (order number container) before tracking-number extraction.
 - EB submission tuned for fail-fast: single-failure tolerance, low step cap, no judge/planning, plus 45-second hard timeout and robust JSON recovery for trailing-text outputs.
+- Order confirmation flow now mirrors shipping architecture: deterministic Playwright extraction first (with in-context sign-in), then LLM fallback.
+- EB deal flow now mirrors EB tracking fail-fast controls and trailing-JSON recovery behavior.
+- API is expected to preserve `amazon_data` even when EB result is failure; treat EB failures as downstream errors, not scrape failures.
 
 ## Immediate Next Task (Resume Path)
 
