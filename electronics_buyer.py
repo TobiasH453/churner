@@ -1,7 +1,6 @@
 import os
 from browser_use import Agent
-from langchain_anthropic import ChatAnthropic
-from pydantic import SecretStr
+from browser_use.llm import ChatAnthropic
 from models import EBDealResult, EBTrackingResult
 from utils import logger, get_env
 from stealth_utils import create_stealth_profile
@@ -17,29 +16,16 @@ os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
 # Path to persistent browser profile directory
 USER_DATA_DIR = "./data/browser-profile"
 
-class AnthropicWrapper:
-    """Wrapper to add provider attribute for browser-use compatibility"""
-    def __init__(self, llm):
-        self._llm = llm
-        self.provider = 'anthropic'
-
-    def __getattr__(self, name):
-        # Map model_name to model for browser-use compatibility
-        if name == 'model_name':
-            return getattr(self._llm, 'model', None)
-        return getattr(self._llm, name)
-
 class ElectronicsBuyerAgent:
     def __init__(self):
         ensure_browser_runtime_compatibility()
-        base_llm = ChatAnthropic(
-            model_name='claude-sonnet-4-5-20250929',
-            api_key=SecretStr(get_env('ANTHROPIC_API_KEY')),
+        self.llm = ChatAnthropic(
+            model='claude-sonnet-4-5-20250929',
+            api_key=get_env('ANTHROPIC_API_KEY'),
             temperature=0.0,
             timeout=30,
-            stop=None
+            max_retries=10,
         )
-        self.llm = AnthropicWrapper(base_llm)
         self.username = get_env('EB_USERNAME')
         self.password = get_env('EB_PASSWORD')
 

@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 Phase: 1 of 5 (Browser Automation Fix)
 Plan: 1 of 2 in current phase
 Status: In progress
-Last activity: 2026-02-13 — Resumed 01-02 with active blocker triage (`items` step failures and runtime compatibility drift)
+Last activity: 2026-02-13 — Resumed 01-02; confirmed post-login failure mode and patched LLM compatibility + auth-step robustness
 
 Progress: [█░░░░░░░░░] 10%
 
@@ -71,6 +71,8 @@ None yet.
 - Guard added in `browser_agent.py` to fail fast if payload contains placeholder markers (`NEEDS_PARSING`, `TBD`) so API can never report success=true with fake data.
 - Login/extraction decoupling added: `amazon_scraper.py` now primes authenticated session with deterministic Playwright actions before invoking browser-use Agent.
 - Optional automatic 2FA added: if `AMAZON_TOTP_SECRET` is set in `.env`, scraper attempts TOTP code entry on Amazon MFA pages before falling back to manual input.
+- New root cause confirmed from logs: `AttributeError: items` came from using `langchain_anthropic.ChatAnthropic` with browser-use token wrapper calling `ainvoke(messages, output_format, ...)`.
+- Fix applied: switched runtime agents to `browser_use.llm.ChatAnthropic` and hardened sign-in flow when password field is delayed/passkey-interrupted.
 
 ## Session Continuity
 

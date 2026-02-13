@@ -2,9 +2,8 @@ import asyncio
 import os
 import time
 from browser_use import Agent
-from langchain_anthropic import ChatAnthropic
+from browser_use.llm import ChatAnthropic
 from playwright.async_api import Page, async_playwright
-from pydantic import SecretStr
 from models import OrderDetails, ShippingDetails
 from utils import logger, get_env
 from typing import Union
@@ -26,30 +25,17 @@ os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
 # Path to persistent browser profile directory
 USER_DATA_DIR = "./data/browser-profile"
 
-class AnthropicWrapper:
-    """Wrapper to add provider attribute for browser-use compatibility"""
-    def __init__(self, llm):
-        self._llm = llm
-        self.provider = 'anthropic'
-
-    def __getattr__(self, name):
-        # Map model_name to model for browser-use compatibility
-        if name == 'model_name':
-            return getattr(self._llm, 'model', None)
-        return getattr(self._llm, name)
-
 class AmazonScraper:
     def __init__(self):
         ensure_browser_runtime_compatibility()
-        # Create ChatAnthropic with wrapper for browser-use compatibility
-        base_llm = ChatAnthropic(
-            model_name='claude-sonnet-4-5-20250929',
-            api_key=SecretStr(get_env('ANTHROPIC_API_KEY')),
+        # Use browser-use native ChatAnthropic implementation for structured output compatibility.
+        self.llm = ChatAnthropic(
+            model='claude-sonnet-4-5-20250929',
+            api_key=get_env('ANTHROPIC_API_KEY'),
             temperature=0.0,
             timeout=60,
-            stop=None
+            max_retries=10,
         )
-        self.llm = AnthropicWrapper(base_llm)
         self.amazon_email = get_env('AMAZON_EMAIL', '')
         self.amazon_password = get_env('AMAZON_PASSWORD', '')
         self.amazon_totp_secret = get_env('AMAZON_TOTP_SECRET', '').replace(' ', '')
@@ -70,6 +56,40 @@ class AmazonScraper:
                 await page.locator(selector).first.fill(value)
                 return True
         return False
+
+    async def _wait_for_any_selector(self, page: Page, selectors: list[str], timeout_seconds: int = 20) -> bool:
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            for selector in selectors:
+                if await self._selector_exists(page, selector):
+                    return True
+            await asyncio.sleep(0.5)
+        return False
+
+    async def _dismiss_passkey_prompt(self, page: Page) -> bool:
+        """
+        Try common passkey-interstitial escapes so password auth can continue.
+        """
+        clicked = await self._click_first(
+            page,
+            [
+                "button:has-text('Not now')",
+                "button:has-text('Cancel')",
+                "a:has-text('Use your password')",
+                "button:has-text('Use password')",
+                "button:has-text('Use a one-time code')",
+            ],
+        )
+        if clicked:
+            await asyncio.sleep(1)
+            return True
+
+        try:
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(1)
+            return True
+        except Exception:
+            return False
 
     async def _is_sign_in_page(self, page: Page) -> bool:
         if "ap/signin" in page.url:
@@ -180,16 +200,22 @@ class AmazonScraper:
                 if await self._is_sign_in_page(page):
                     logger.info("Amazon sign-in detected. Performing deterministic login sequence...")
 
-                    email_filled = await self._fill_first(
-                        page,
-                        ["#ap_email", "input[name='email']", "input[type='email']"],
-                        self.amazon_email,
-                    )
-                    if not email_filled:
-                        raise RuntimeError("Could not find Amazon email input field.")
+                    if await self._selector_exists(page, "#ap_email") or await self._selector_exists(page, "input[name='email']") or await self._selector_exists(page, "input[type='email']"):
+                        email_filled = await self._fill_first(
+                            page,
+                            ["#ap_email", "input[name='email']", "input[type='email']"],
+                            self.amazon_email,
+                        )
+                        if not email_filled:
+                            raise RuntimeError("Could not find Amazon email input field.")
 
-                    await self._click_first(page, ["#continue", "input#continue", "input[name='continue']"])
-                    await asyncio.sleep(1)
+                    if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=4):
+                        await self._click_first(page, ["#continue", "input#continue", "input[name='continue']"])
+                        await asyncio.sleep(1)
+
+                    if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10):
+                        await self._dismiss_passkey_prompt(page)
+                        await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10)
 
                     password_filled = await self._fill_first(
                         page,
@@ -197,7 +223,8 @@ class AmazonScraper:
                         self.amazon_password,
                     )
                     if not password_filled:
-                        raise RuntimeError("Could not find Amazon password input field.")
+                        current_url = page.url
+                        raise RuntimeError(f"Could not find Amazon password input field. Current URL: {current_url}")
 
                     await self._click_first(page, ["#signInSubmit", "input#signInSubmit"])
 

@@ -43,6 +43,9 @@ Read these first when resuming:
 - A stale long-running server process on port `8080` was observed serving old code in memory. Restart is required after code changes.
 - `browser_agent.py` now includes a placeholder guard that forces failure if payload contains `NEEDS_PARSING`/`TBD`.
 - `amazon_scraper.py` now performs deterministic Playwright login/session priming before LLM extraction, so login is no longer left to model behavior.
+- Latest verified failure from real logs: agent reached Amazon order-details URL, then failed with `AttributeError: items` inside `langchain_core` config handling.
+- Root cause patch now in repo: runtime agents use `browser_use.llm.ChatAnthropic` (compatible `ainvoke(messages, output_format, ...)`) instead of `langchain_anthropic` wrapper.
+- Login priming now also handles delayed password step and passkey interruption before raising.
 
 ## Immediate Next Task (Resume Path)
 
@@ -66,6 +69,7 @@ Execute **Phase 1 / Plan 02** acceptance exactly as the active plan expects:
    - Capture terminal errors plus:
      - `logs/agent.gif`
      - `logs/agent_conversations/`
+   - Also capture the exact API response from n8n execution (`execution_data` for latest run) to distinguish auth-step failures from extraction-step failures.
 4. After successful verification:
    - Create `.planning/phases/01-browser-automation-fix/01-02-SUMMARY.md`
    - Update `.planning/STATE.md` current position/progress
