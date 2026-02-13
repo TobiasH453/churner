@@ -176,6 +176,56 @@ class AmazonScraper:
             await asyncio.sleep(2)
         raise RuntimeError("Amazon login did not complete within 180 seconds. Still on auth page.")
 
+    async def _perform_sign_in_if_needed(self, page: Page, target_url: str) -> None:
+        """
+        Deterministic sign-in flow that can run in any active context/page.
+        """
+        if not await self._is_sign_in_page(page):
+            return
+
+        logger.info("Amazon sign-in detected. Performing deterministic login sequence...")
+
+        if await self._selector_exists(page, "#ap_email") or await self._selector_exists(page, "input[name='email']") or await self._selector_exists(page, "input[type='email']"):
+            email_filled = await self._fill_first(
+                page,
+                ["#ap_email", "input[name='email']", "input[type='email']"],
+                self.amazon_email,
+            )
+            if not email_filled:
+                raise RuntimeError("Could not find Amazon email input field.")
+
+        if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=4):
+            await self._click_first(page, ["#continue", "input#continue", "input[name='continue']"])
+            await asyncio.sleep(1)
+
+        if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10):
+            await self._dismiss_passkey_prompt(page)
+            await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10)
+
+        password_filled = await self._fill_first(
+            page,
+            ["#ap_password", "input[name='password']", "input[type='password']"],
+            self.amazon_password,
+        )
+        if not password_filled:
+            current_url = page.url
+            raise RuntimeError(f"Could not find Amazon password input field. Current URL: {current_url}")
+
+        await self._click_first(page, ["#signInSubmit", "input#signInSubmit"])
+
+        if await self._is_mfa_page(page):
+            if self.amazon_totp_secret:
+                logger.warning("Amazon 2FA detected. TOTP secret is configured; trying automatic code entry.")
+            else:
+                logger.warning(
+                    "Amazon 2FA detected. Complete the challenge in the browser window; "
+                    "waiting up to 180 seconds."
+                )
+
+        await self._wait_for_auth_completion(page, timeout_seconds=180)
+        await page.goto(target_url, wait_until="domcontentloaded")
+        await asyncio.sleep(1)
+
     async def _prime_amazon_session(self, target_url: str) -> None:
         """
         Deterministic login/session priming before agent run.
@@ -200,52 +250,7 @@ class AmazonScraper:
                 page = context.pages[0] if context.pages else await context.new_page()
                 await page.goto(target_url, wait_until="domcontentloaded")
                 await asyncio.sleep(1)
-
-                if await self._is_sign_in_page(page):
-                    logger.info("Amazon sign-in detected. Performing deterministic login sequence...")
-
-                    if await self._selector_exists(page, "#ap_email") or await self._selector_exists(page, "input[name='email']") or await self._selector_exists(page, "input[type='email']"):
-                        email_filled = await self._fill_first(
-                            page,
-                            ["#ap_email", "input[name='email']", "input[type='email']"],
-                            self.amazon_email,
-                        )
-                        if not email_filled:
-                            raise RuntimeError("Could not find Amazon email input field.")
-
-                    if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=4):
-                        await self._click_first(page, ["#continue", "input#continue", "input[name='continue']"])
-                        await asyncio.sleep(1)
-
-                    if not await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10):
-                        await self._dismiss_passkey_prompt(page)
-                        await self._wait_for_any_selector(page, ["#ap_password", "input[name='password']", "input[type='password']"], timeout_seconds=10)
-
-                    password_filled = await self._fill_first(
-                        page,
-                        ["#ap_password", "input[name='password']", "input[type='password']"],
-                        self.amazon_password,
-                    )
-                    if not password_filled:
-                        current_url = page.url
-                        raise RuntimeError(f"Could not find Amazon password input field. Current URL: {current_url}")
-
-                    await self._click_first(page, ["#signInSubmit", "input#signInSubmit"])
-
-                    if await self._is_mfa_page(page):
-                        if self.amazon_totp_secret:
-                            logger.warning(
-                                "Amazon 2FA detected. TOTP secret is configured; trying automatic code entry."
-                            )
-                        else:
-                            logger.warning(
-                                "Amazon 2FA detected. Complete the challenge in the browser window; "
-                                "waiting up to 180 seconds."
-                            )
-
-                    await self._wait_for_auth_completion(page, timeout_seconds=180)
-                    await page.goto(target_url, wait_until="domcontentloaded")
-                    await asyncio.sleep(1)
+                await self._perform_sign_in_if_needed(page, target_url)
             finally:
                 await context.close()
 
@@ -473,8 +478,10 @@ class AmazonScraper:
                 await page.goto(order_details_url, wait_until="domcontentloaded")
                 await asyncio.sleep(2)
 
+                # Login in this same context if Amazon still prompts for auth.
+                await self._perform_sign_in_if_needed(page, order_details_url)
                 if await self._is_sign_in_page(page):
-                    raise RuntimeError("Fallback scrape reached sign-in page (session not authenticated).")
+                    raise RuntimeError("Fallback scrape still on sign-in page after deterministic login attempt.")
 
                 await self._click_first(
                     page,
@@ -572,7 +579,16 @@ class AmazonScraper:
 
         order_details_url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order_number}"
 
-        # Ensure login/session is ready before the LLM agent starts extracting.
+        # Primary path: deterministic sign-in + extraction in one context.
+        try:
+            return await self._scrape_shipping_fallback(order_number)
+        except Exception as primary_exc:
+            logger.warning(
+                "Deterministic shipping scrape primary path failed: %r. Falling back to LLM extraction path.",
+                primary_exc,
+            )
+
+        # Secondary path: session priming + LLM extraction.
         await self._prime_amazon_session(order_details_url)
 
         task = f"""

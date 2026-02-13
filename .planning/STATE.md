@@ -77,6 +77,8 @@ None yet.
 - Runtime hardening added in `utils.py`: `.env` now loads with `override=True`; key values are trimmed/unquoted; `ANTHROPIC_API_KEY` fails fast with a clear validation error if malformed.
 - New extraction hardening: when browser-use returns JSON with trailing text, `amazon_scraper.py` now attempts recovery by extracting the first balanced JSON object and validating against `ShippingDetails`/`OrderDetails` before failing.
 - New resilience path for shipping: if LLM scrape fails (`site unavailable`, auth-placeholder output, or judge fail), scraper now attempts deterministic Playwright fallback extraction (tracking number/carrier/delivery/items) before returning failure.
+- Login reliability update: sign-in flow was extracted to `_perform_sign_in_if_needed(...)` and is now used in both session priming and fallback extraction context.
+- Shipping strategy update: deterministic Playwright extraction now runs first (sign-in + extraction in one context), with LLM path only as secondary fallback.
 
 ## Session Continuity
 

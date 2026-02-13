@@ -50,6 +50,8 @@ Read these first when resuming:
 - Mitigation now in code: env loading uses `load_dotenv(override=True)` and `get_env('ANTHROPIC_API_KEY')` validates format/length to fail immediately with actionable error.
 - Additional mitigation now in code: `amazon_scraper.py` recovers from model outputs that contain valid JSON plus trailing prose by extracting the first balanced JSON object and re-validating against Pydantic schema.
 - Shipping scrape now includes deterministic fallback: on LLM navigation/judge failures or auth-placeholder outputs, code runs Playwright-only extraction from order details/track page before failing.
+- Deterministic shipping path is now primary (not fallback-only): shipping scrape first does sign-in + extraction in a single Playwright context, then falls back to LLM path only if deterministic extraction fails.
+- Shared sign-in helper now used across both paths to avoid drift (`_perform_sign_in_if_needed`).
 
 ## Immediate Next Task (Resume Path)
 
