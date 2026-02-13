@@ -49,6 +49,7 @@ Read these first when resuming:
 - Additional blocker discovered from latest run: Anthropic API call failed with `401 invalid x-api-key`.
 - Mitigation now in code: env loading uses `load_dotenv(override=True)` and `get_env('ANTHROPIC_API_KEY')` validates format/length to fail immediately with actionable error.
 - Additional mitigation now in code: `amazon_scraper.py` recovers from model outputs that contain valid JSON plus trailing prose by extracting the first balanced JSON object and re-validating against Pydantic schema.
+- Shipping scrape now includes deterministic fallback: on LLM navigation/judge failures or auth-placeholder outputs, code runs Playwright-only extraction from order details/track page before failing.
 
 ## Immediate Next Task (Resume Path)
 

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from typing import Any
 from browser_use import Agent
@@ -361,6 +362,148 @@ class AmazonScraper:
 
         return structured
 
+    @staticmethod
+    def _looks_like_placeholder_shipping(data: ShippingDetails) -> bool:
+        joined = " ".join(
+            [
+                str(data.tracking_number or ""),
+                str(data.carrier or ""),
+                str(data.delivery_date or ""),
+            ]
+        ).lower()
+        return (
+            "unable to retrieve" in joined
+            or "authentication required" in joined
+            or "not available" in joined
+        )
+
+    @staticmethod
+    def _guess_carrier(text: str, tracking_number: str) -> str:
+        lower = text.lower()
+        if "amazon logistics" in lower or tracking_number.upper().startswith("TBA"):
+            return "Amazon Logistics"
+        if "ups" in lower or tracking_number.upper().startswith("1Z"):
+            return "UPS"
+        if "usps" in lower:
+            return "USPS"
+        if "fedex" in lower:
+            return "FedEx"
+        if "dhl" in lower:
+            return "DHL"
+        if "ontrac" in lower:
+            return "OnTrac"
+        return "Unknown"
+
+    @staticmethod
+    def _extract_tracking_number(text: str) -> str | None:
+        patterns = [
+            r"\b1Z[0-9A-Z]{16}\b",       # UPS
+            r"\bTBA[0-9A-Z]{8,}\b",      # Amazon Logistics
+            r"\b9[0-9]{21,23}\b",        # USPS style
+            r"\b[0-9]{12,22}\b",         # Generic numeric carriers
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return match.group(0)
+        return None
+
+    @staticmethod
+    def _extract_delivery_date(text: str) -> str | None:
+        patterns = [
+            r"(?:Arriving|Delivered|Delivery by|Expected by|Arrives)\s+([A-Za-z]{3,9}\s+\d{1,2}(?:,\s+\d{4})?)",
+            r"(?:Arriving|Delivered)\s+([A-Za-z]{3,9}\s+\d{1,2})",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                return match.group(1).strip()
+        return None
+
+    async def _extract_items_from_order_page(self, page: Page) -> list[dict]:
+        """
+        Best-effort item extraction from order details page.
+        """
+        selectors = [
+            "a[href*='/dp/']",
+            "a.a-link-normal",
+            "[data-a-word-break='normal']",
+            ".a-truncate-cut",
+        ]
+
+        names: list[str] = []
+        for selector in selectors:
+            if not await self._selector_exists(page, selector):
+                continue
+            loc = page.locator(selector)
+            count = min(await loc.count(), 40)
+            for i in range(count):
+                text = (await loc.nth(i).inner_text()).strip()
+                if len(text) < 6:
+                    continue
+                if any(skip in text.lower() for skip in ["track package", "buy it again", "order details"]):
+                    continue
+                if text not in names:
+                    names.append(text)
+            if names:
+                break
+
+        return [{"name": name, "quantity": 1} for name in names[:10]]
+
+    async def _scrape_shipping_fallback(self, order_number: str) -> ShippingDetails:
+        """
+        Deterministic Playwright fallback when LLM navigation/extraction fails.
+        """
+        order_details_url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order_number}"
+        chromium_path = get_chromium_executable()
+
+        logger.warning("Using deterministic fallback shipping scrape for order %s", order_number)
+
+        async with async_playwright() as p:
+            context = await p.chromium.launch_persistent_context(
+                user_data_dir=USER_DATA_DIR,
+                headless=False,
+                executable_path=chromium_path,
+                args=STEALTH_BROWSER_ARGS,
+                ignore_default_args=STEALTH_IGNORE_DEFAULT_ARGS,
+            )
+
+            try:
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto(order_details_url, wait_until="domcontentloaded")
+                await asyncio.sleep(2)
+
+                if await self._is_sign_in_page(page):
+                    raise RuntimeError("Fallback scrape reached sign-in page (session not authenticated).")
+
+                await self._click_first(
+                    page,
+                    [
+                        "a:has-text('Track package')",
+                        "button:has-text('Track package')",
+                        "a:has-text('Track')",
+                    ],
+                )
+                await asyncio.sleep(2)
+
+                body_text = await page.locator("body").inner_text()
+                tracking_number = self._extract_tracking_number(body_text)
+                delivery_date = self._extract_delivery_date(body_text)
+                carrier = self._guess_carrier(body_text, tracking_number or "")
+                items = await self._extract_items_from_order_page(page)
+
+                if not tracking_number:
+                    raise RuntimeError("Fallback scrape could not find a tracking number on the order page.")
+
+                return ShippingDetails(
+                    tracking_number=tracking_number,
+                    carrier=carrier,
+                    delivery_date=delivery_date or "Unknown",
+                    items=items,
+                )
+            finally:
+                await context.close()
+
     async def scrape_order_confirmation(self, order_number: str) -> OrderDetails:
         """
         Navigate to Amazon invoice page and extract order details
@@ -473,11 +616,28 @@ class AmazonScraper:
             result = await agent.run()
             errors = [err for err in result.errors() if err]
             if errors:
-                raise RuntimeError(
-                    f"Agent failed during shipping scrape. last_error={errors[-1]!r} "
-                    f"final_result={result.final_result()!r}"
+                logger.warning(
+                    "LLM shipping scrape failed (last_error=%r). Trying deterministic fallback.",
+                    errors[-1],
                 )
+                try:
+                    return await self._scrape_shipping_fallback(order_number)
+                except Exception as fallback_exc:
+                    raise RuntimeError(
+                        f"Agent failed during shipping scrape. last_error={errors[-1]!r} "
+                        f"final_result={result.final_result()!r} fallback_error={fallback_exc!r}"
+                    ) from fallback_exc
+
             structured = self._get_validated_structured_output(result, ShippingDetails, f"shipping {order_number}")
+            if self._looks_like_placeholder_shipping(structured):
+                logger.warning("LLM shipping scrape returned placeholder/auth text. Trying deterministic fallback.")
+                try:
+                    return await self._scrape_shipping_fallback(order_number)
+                except Exception as fallback_exc:
+                    raise RuntimeError(
+                        f"Shipping scrape returned placeholder data and fallback failed: {fallback_exc!r}. "
+                        f"final_result={result.final_result()!r}"
+                    ) from fallback_exc
             return structured
         finally:
             await agent.close()
