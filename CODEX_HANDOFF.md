@@ -61,6 +61,7 @@ Read these first when resuming:
 - Order confirmation flow now mirrors shipping architecture: deterministic Playwright extraction first (with in-context sign-in), then LLM fallback.
 - EB deal flow now mirrors EB tracking fail-fast controls and trailing-JSON recovery behavior.
 - API is expected to preserve `amazon_data` even when EB result is failure; treat EB failures as downstream errors, not scrape failures.
+- Cashback parser now handles additive phrasing (`5% back` + `extra 1%`) and chooses the correct combined percentage.
 
 ## Immediate Next Task (Resume Path)
 

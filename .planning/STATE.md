@@ -89,6 +89,7 @@ None yet.
 - Order-flow parity applied: order confirmation now uses deterministic sign-in + extraction as primary path (same pattern as shipping), with LLM as fallback.
 - EB deal submission now also fails fast (single-failure tolerance, low step cap, short timeout, no judge/planning) and recovers JSON from trailing-text outputs.
 - Confirmed response contract target: keep Amazon scraped payload even when EB deal/tracking submission fails.
+- Cashback parsing fix applied: supports combined language like "Earns 5% back and extra 1%" and now returns 6% in that case (while still returning 5% for plain "Earns 5% back").
 
 ## Session Continuity
 

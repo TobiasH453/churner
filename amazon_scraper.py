@@ -479,17 +479,45 @@ class AmazonScraper:
 
     @staticmethod
     def _extract_cashback_percent(text: str) -> float:
-        patterns = [
+        collapsed = " ".join(text.split())
+        candidates: list[float] = []
+
+        # Handle "Earns 5% back and extra 1% ..." style phrases.
+        combined_patterns = [
+            r"(?:earns?|get)\s+(\d+(?:\.\d+)?)%\s+back.{0,140}?(?:extra|additional)\s+(\d+(?:\.\d+)?)%",
+            r"(?:extra|additional)\s+(\d+(?:\.\d+)?)%.{0,140}?(?:earns?|get)\s+(\d+(?:\.\d+)?)%\s+back",
+        ]
+        for pattern in combined_patterns:
+            for m in re.finditer(pattern, collapsed, flags=re.IGNORECASE):
+                try:
+                    first = float(m.group(1))
+                    second = float(m.group(2))
+                    candidates.append(first + second)
+                except Exception:
+                    pass
+
+        # Handle plain "Earns 5% back" / "Get 5% back".
+        for m in re.finditer(r"(?:earns?|get)\s+(\d+(?:\.\d+)?)%\s+back", collapsed, flags=re.IGNORECASE):
+            try:
+                candidates.append(float(m.group(1)))
+            except Exception:
+                pass
+
+        # Generic fallback patterns.
+        fallback_patterns = [
             r"(\d+(?:\.\d+)?)\s*%\s*(?:cashback|back|reward)",
             r"(?:cashback|reward)[^\d]{0,20}(\d+(?:\.\d+)?)\s*%",
         ]
-        for pattern in patterns:
-            m = re.search(pattern, text, flags=re.IGNORECASE)
-            if m:
+        for pattern in fallback_patterns:
+            for m in re.finditer(pattern, collapsed, flags=re.IGNORECASE):
                 try:
-                    return float(m.group(1))
+                    candidates.append(float(m.group(1)))
                 except Exception:
                     pass
+
+        if candidates:
+            return max(candidates)
+
         return 0.0
 
     async def _extract_items_from_order_page(self, page: Page, order_number: str) -> list[dict]:
