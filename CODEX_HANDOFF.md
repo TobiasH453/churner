@@ -52,6 +52,9 @@ Read these first when resuming:
 - Shipping scrape now includes deterministic fallback: on LLM navigation/judge failures or auth-placeholder outputs, code runs Playwright-only extraction from order details/track page before failing.
 - Deterministic shipping path is now primary (not fallback-only): shipping scrape first does sign-in + extraction in a single Playwright context, then falls back to LLM path only if deterministic extraction fails.
 - Shared sign-in helper now used across both paths to avoid drift (`_perform_sign_in_if_needed`).
+- New confirmed milestone: shipping flow extracted real Amazon tracking number and attempted EB submission; Amazon extraction no longer blocked.
+- Known external blocker: EB site submission endpoint currently returns repeated server error and may destabilize browser session; treat as non-Amazon blocker.
+- API behavior updated: preserve `amazon_data` even when EB submission fails (return `success=false`, `eb_result.success=false`, `errors` populated).
 
 ## Immediate Next Task (Resume Path)
 

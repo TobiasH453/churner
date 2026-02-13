@@ -81,6 +81,10 @@ class AmazonScraper:
                 "button:has-text('Cancel')",
                 "a:has-text('Use your password')",
                 "button:has-text('Use password')",
+                "a:has-text('Sign in with your password')",
+                "button:has-text('Use password instead')",
+                "button:has-text('Try another way')",
+                "a:has-text('Try another way')",
                 "button:has-text('Use a one-time code')",
             ],
         )
@@ -135,7 +139,15 @@ class AmazonScraper:
         code = pyotp.TOTP(self.amazon_totp_secret).now()
         filled = await self._fill_first(
             page,
-            ["input[name='otpCode']", "#auth-mfa-otpcode", "input[name='cvf_captcha_input']"],
+            [
+                "input[name='otpCode']",
+                "#auth-mfa-otpcode",
+                "input[name='cvf_captcha_input']",
+                "input[name='code']",
+                "#cvf-input-code",
+                "input[name='auth-mfa-otpcode']",
+                "input#input-box-otp",
+            ],
             code,
         )
         if not filled:
@@ -147,12 +159,17 @@ class AmazonScraper:
             [
                 "input#auth-signin-button",
                 "input[name='rememberDevice'] + span input",
+                "#cvf-submit-otp-button input",
+                "input[name='cvf-submit-otp-button']",
                 "input[type='submit']",
             ],
         )
         if not submitted:
             # Fallback: hit Enter in the OTP input.
-            locator = page.locator("input[name='otpCode'], #auth-mfa-otpcode, input[name='cvf_captcha_input']").first
+            locator = page.locator(
+                "input[name='otpCode'], #auth-mfa-otpcode, input[name='cvf_captcha_input'], "
+                "input[name='code'], #cvf-input-code, input[name='auth-mfa-otpcode'], input#input-box-otp"
+            ).first
             await locator.press("Enter")
 
         logger.info("Submitted TOTP code automatically.")
@@ -184,6 +201,9 @@ class AmazonScraper:
             return
 
         logger.info("Amazon sign-in detected. Performing deterministic login sequence...")
+
+        # Prefer password flow over passkey interstitials if present.
+        await self._dismiss_passkey_prompt(page)
 
         if await self._selector_exists(page, "#ap_email") or await self._selector_exists(page, "input[name='email']") or await self._selector_exists(page, "input[type='email']"):
             email_filled = await self._fill_first(

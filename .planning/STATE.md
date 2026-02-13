@@ -79,6 +79,10 @@ None yet.
 - New resilience path for shipping: if LLM scrape fails (`site unavailable`, auth-placeholder output, or judge fail), scraper now attempts deterministic Playwright fallback extraction (tracking number/carrier/delivery/items) before returning failure.
 - Login reliability update: sign-in flow was extracted to `_perform_sign_in_if_needed(...)` and is now used in both session priming and fallback extraction context.
 - Shipping strategy update: deterministic Playwright extraction now runs first (sign-in + extraction in one context), with LLM path only as secondary fallback.
+- Verified progress from live run: Amazon side successfully reached correct order page and extracted tracking data (`TBA...`) before handoff to EB submission.
+- External dependency blocker confirmed: EB tracking submission currently fails server-side (`Failed to submit tracking numbers`) and can corrupt browser session afterward.
+- Response contract fix applied: on EB failure, API now preserves `amazon_data`, returns `eb_result.success=false`, and includes EB error in `errors` rather than nulling both payloads.
+- Login hardening update: added more passkey/alternate-auth selectors and broader OTP field selectors to reduce manual intervention on Amazon sign-in.
 
 ## Session Continuity
 
