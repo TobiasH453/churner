@@ -52,6 +52,7 @@ class AmazonScraper:
         self.llm = AnthropicWrapper(base_llm)
         self.amazon_email = get_env('AMAZON_EMAIL', '')
         self.amazon_password = get_env('AMAZON_PASSWORD', '')
+        self.amazon_totp_secret = get_env('AMAZON_TOTP_SECRET', '').replace(' ', '')
 
     async def _selector_exists(self, page: Page, selector: str) -> bool:
         return await page.locator(selector).count() > 0
@@ -93,11 +94,61 @@ class AmazonScraper:
             ]
         )
 
+    async def _try_totp_if_available(self, page: Page) -> bool:
+        """
+        If AMAZON_TOTP_SECRET is configured and we're on an MFA page,
+        generate a TOTP and try submitting it automatically.
+        """
+        if not self.amazon_totp_secret:
+            return False
+
+        try:
+            import pyotp
+        except Exception as exc:
+            logger.warning("pyotp not available for automatic 2FA: %s", exc)
+            return False
+
+        code = pyotp.TOTP(self.amazon_totp_secret).now()
+        filled = await self._fill_first(
+            page,
+            ["input[name='otpCode']", "#auth-mfa-otpcode", "input[name='cvf_captcha_input']"],
+            code,
+        )
+        if not filled:
+            logger.warning("2FA page detected but OTP input field was not found.")
+            return False
+
+        submitted = await self._click_first(
+            page,
+            [
+                "input#auth-signin-button",
+                "input[name='rememberDevice'] + span input",
+                "input[type='submit']",
+            ],
+        )
+        if not submitted:
+            # Fallback: hit Enter in the OTP input.
+            locator = page.locator("input[name='otpCode'], #auth-mfa-otpcode, input[name='cvf_captcha_input']").first
+            await locator.press("Enter")
+
+        logger.info("Submitted TOTP code automatically.")
+        await asyncio.sleep(2)
+        return True
+
     async def _wait_for_auth_completion(self, page: Page, timeout_seconds: int = 180) -> None:
         deadline = time.time() + timeout_seconds
+        last_totp_attempt = 0.0
         while time.time() < deadline:
             if not await self._is_sign_in_page(page) and not await self._is_mfa_page(page):
                 return
+
+            if await self._is_mfa_page(page):
+                now = time.time()
+                if now - last_totp_attempt >= 5:
+                    if await self._try_totp_if_available(page):
+                        last_totp_attempt = now
+                        continue
+
             await asyncio.sleep(2)
         raise RuntimeError("Amazon login did not complete within 180 seconds. Still on auth page.")
 
@@ -151,10 +202,15 @@ class AmazonScraper:
                     await self._click_first(page, ["#signInSubmit", "input#signInSubmit"])
 
                     if await self._is_mfa_page(page):
-                        logger.warning(
-                            "Amazon 2FA detected. Complete the challenge in the browser window; "
-                            "waiting up to 180 seconds."
-                        )
+                        if self.amazon_totp_secret:
+                            logger.warning(
+                                "Amazon 2FA detected. TOTP secret is configured; trying automatic code entry."
+                            )
+                        else:
+                            logger.warning(
+                                "Amazon 2FA detected. Complete the challenge in the browser window; "
+                                "waiting up to 180 seconds."
+                            )
 
                     await self._wait_for_auth_completion(page, timeout_seconds=180)
                     await page.goto(target_url, wait_until="domcontentloaded")

@@ -70,6 +70,7 @@ None yet.
 - Root-cause drift identified: long-running server process on port 8080 was still using old in-memory code path (old prompts/model + placeholder fallback behavior).
 - Guard added in `browser_agent.py` to fail fast if payload contains placeholder markers (`NEEDS_PARSING`, `TBD`) so API can never report success=true with fake data.
 - Login/extraction decoupling added: `amazon_scraper.py` now primes authenticated session with deterministic Playwright actions before invoking browser-use Agent.
+- Optional automatic 2FA added: if `AMAZON_TOTP_SECRET` is set in `.env`, scraper attempts TOTP code entry on Amazon MFA pages before falling back to manual input.
 
 ## Session Continuity
 

@@ -93,6 +93,7 @@ python main.py
   - `ANTHROPIC_API_KEY`
   - `AMAZON_EMAIL`
   - `AMAZON_PASSWORD` (if prompt fallback is used)
+  - `AMAZON_TOTP_SECRET` (optional, for automatic 2FA code entry)
   - `EB_USERNAME`
   - `EB_PASSWORD`
 - Browser profile/session expected at:
