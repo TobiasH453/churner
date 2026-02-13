@@ -445,7 +445,7 @@ class AmazonScraper:
                 return match.group(1).strip()
         return None
 
-    async def _extract_items_from_order_page(self, page: Page) -> list[dict]:
+    async def _extract_items_from_order_page(self, page: Page, order_number: str) -> list[dict]:
         """
         Best-effort item extraction from order details page.
         Prioritizes product links inside shipment/order containers and
@@ -454,7 +454,7 @@ class AmazonScraper:
         # Try extracting from nearest shipment container around "Track package" first.
         extracted = await page.evaluate(
             """
-            () => {
+            (orderNumber) => {
               const bad = [
                 'buy it again',
                 'recommended',
@@ -497,6 +497,21 @@ class AmazonScraper:
 
               const productLinkSelector = "a[href*='/dp/'], a[href*='/gp/product/']";
 
+              // First attempt: order-number container context.
+              const allNodes = Array.from(document.querySelectorAll('div, span, a, h1, h2, h3'));
+              const orderNode = allNodes.find((el) => (el.textContent || '').includes(orderNumber));
+              if (orderNode) {
+                let container = orderNode;
+                for (let i = 0; i < 10 && container && container.parentElement; i++) {
+                  container = container.parentElement;
+                  const links = container.querySelectorAll(productLinkSelector);
+                  if (links.length > 0) {
+                    links.forEach((a) => add(a.textContent || ''));
+                    if (uniq.length > 0) return uniq.slice(0, 10);
+                  }
+                }
+              }
+
               // First attempt: around track-package controls (shipment context).
               const trackControls = Array.from(document.querySelectorAll('a,button'))
                 .filter((el) => (el.textContent || '').toLowerCase().includes('track package'));
@@ -517,7 +532,8 @@ class AmazonScraper:
               document.querySelectorAll(productLinkSelector).forEach((a) => add(a.textContent || ''));
               return uniq.slice(0, 10);
             }
-            """
+            """,
+            order_number
         )
 
         if extracted:
@@ -569,6 +585,9 @@ class AmazonScraper:
                 if await self._is_sign_in_page(page):
                     raise RuntimeError("Fallback scrape still on sign-in page after deterministic login attempt.")
 
+                # Extract items from order summary/order details context first.
+                items = await self._extract_items_from_order_page(page, order_number)
+
                 await self._click_first(
                     page,
                     [
@@ -583,7 +602,10 @@ class AmazonScraper:
                 tracking_number = self._extract_tracking_number(body_text)
                 delivery_date = self._extract_delivery_date(body_text)
                 carrier = self._guess_carrier(body_text, tracking_number or "")
-                items = await self._extract_items_from_order_page(page)
+
+                if not items:
+                    # Retry item extraction after possible page transition.
+                    items = await self._extract_items_from_order_page(page, order_number)
 
                 if not tracking_number:
                     raise RuntimeError("Fallback scrape could not find a tracking number on the order page.")

@@ -56,6 +56,8 @@ Read these first when resuming:
 - Known external blocker: EB site submission endpoint currently returns repeated server error and may destabilize browser session; treat as non-Amazon blocker.
 - API behavior updated: preserve `amazon_data` even when EB submission fails (return `success=false`, `eb_result.success=false`, `errors` populated).
 - Shipping item extraction tightened: parser now targets `/dp/` and `/gp/product/` links in shipment context (around track controls) and drops recommendation/search/price-heavy noise strings.
+- Shipping extraction now explicitly does items-first from order summary context (order number container) before tracking-number extraction.
+- EB submission tuned for fail-fast: single-failure tolerance, low step cap, no judge/planning, plus 45-second hard timeout and robust JSON recovery for trailing-text outputs.
 
 ## Immediate Next Task (Resume Path)
 

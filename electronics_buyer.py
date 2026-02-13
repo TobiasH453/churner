@@ -1,3 +1,5 @@
+import asyncio
+import json
 import os
 from browser_use import Agent
 from browser_use.llm import ChatAnthropic
@@ -5,6 +7,7 @@ from models import EBDealResult, EBTrackingResult
 from utils import logger, get_env
 from stealth_utils import create_stealth_profile
 from runtime_checks import ensure_browser_runtime_compatibility
+from pydantic import ValidationError
 
 os.makedirs("./logs", exist_ok=True)
 
@@ -103,8 +106,10 @@ class ElectronicsBuyerAgent:
            - Package contents field: {items_str}
            - Leave insurance field blank (or unchecked)
         3. Click the "Submit" or "Add Tracking" button
-        4. Wait for confirmation message
-        5. Return success confirmation
+        4. Wait briefly for result.
+           - If you see any error/failed message, STOP immediately and return success=false with the error text.
+           - Do NOT retry submission more than once.
+        5. Return success confirmation only if a real success confirmation is visible.
         """
 
         # Load browser profile with saved session and randomized human-like timing
@@ -118,20 +123,105 @@ class ElectronicsBuyerAgent:
             output_model_schema=EBTrackingResult,
             generate_gif='./logs/eb_agent.gif',
             save_conversation_path="./logs/eb_agent_conversations",
-            max_failures=5,
+            max_failures=1,
+            max_steps=8,
+            step_timeout=60,
+            use_judge=False,
+            enable_planning=False,
+            final_response_after_failure=False,
         )
 
         try:
-            result = await agent.run()
+            try:
+                result = await asyncio.wait_for(agent.run(), timeout=45)
+            except asyncio.TimeoutError:
+                return EBTrackingResult(
+                    success=False,
+                    tracking_id=None,
+                    error_message="EB tracking submission timed out after 45s",
+                )
+
             errors = [err for err in result.errors() if err]
             if errors:
-                raise RuntimeError(
-                    f"Tracking agent failed. last_error={errors[-1]!r} "
-                    f"final_result={result.final_result()!r}"
+                return EBTrackingResult(
+                    success=False,
+                    tracking_id=None,
+                    error_message=f"Tracking agent failed fast: {errors[-1]}",
                 )
-            structured = result.structured_output
+
+            try:
+                structured = result.structured_output
+            except ValidationError:
+                structured = None
+
             if structured is None:
-                raise RuntimeError(f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}")
+                recovered = self._recover_tracking_output(result.final_result())
+                if recovered is not None:
+                    return recovered
+                return EBTrackingResult(
+                    success=False,
+                    tracking_id=None,
+                    error_message=f"Tracking submission agent returned no structured output. final_result={result.final_result()!r}",
+                )
+
             return structured
         finally:
             await agent.close()
+
+    @staticmethod
+    def _extract_first_json_object(text: str) -> str | None:
+        start = text.find("{")
+        if start == -1:
+            return None
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_string:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == '"':
+                    in_string = False
+                continue
+            if ch == '"':
+                in_string = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+        return None
+
+    def _recover_tracking_output(self, raw_output) -> EBTrackingResult | None:
+        if raw_output is None:
+            return None
+        if isinstance(raw_output, dict):
+            try:
+                return EBTrackingResult.model_validate(raw_output)
+            except Exception:
+                return None
+        if not isinstance(raw_output, str):
+            return None
+
+        candidate = raw_output.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.strip("`")
+            if candidate.lower().startswith("json"):
+                candidate = candidate[4:].strip()
+
+        try:
+            return EBTrackingResult.model_validate_json(candidate)
+        except Exception:
+            pass
+
+        obj_text = self._extract_first_json_object(candidate)
+        if not obj_text:
+            return None
+        try:
+            return EBTrackingResult.model_validate(json.loads(obj_text))
+        except Exception:
+            return None

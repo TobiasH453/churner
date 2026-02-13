@@ -84,6 +84,8 @@ None yet.
 - Response contract fix applied: on EB failure, API now preserves `amazon_data`, returns `eb_result.success=false`, and includes EB error in `errors` rather than nulling both payloads.
 - Login hardening update: added more passkey/alternate-auth selectors and broader OTP field selectors to reduce manual intervention on Amazon sign-in.
 - Amazon data quality fix in progress: shipping item extraction now prioritizes product links near shipment/track-package containers and filters recommendation/search/price noise that caused wrong item names.
+- Extraction ordering fix applied: shipping fallback now extracts item names from order summary context first, then extracts tracking info after optional Track Package navigation.
+- EB token/cost control fix applied: tracking submission agent now fails fast (`max_failures=1`, `max_steps=8`, 45s hard timeout, no judge/planning) to avoid long retry loops on known EB server errors.
 
 ## Session Continuity
 
