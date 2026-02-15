@@ -42,6 +42,15 @@ class BrowserAgent:
         if self._contains_placeholder(eb_payload):
             raise RuntimeError(f"ElectronicsBuyer payload contains placeholder values: {eb_payload!r}")
 
+    @staticmethod
+    def _is_nonfatal_eb_skip(eb_result: Any) -> bool:
+        if not eb_result:
+            return False
+        message = getattr(eb_result, "error_message", None)
+        if not isinstance(message, str):
+            return False
+        return "skipped eb task" in message.lower()
+
     async def process_email(self, email_data: EmailData) -> AgentResponse:
         """
         Main orchestration function
@@ -110,6 +119,18 @@ class BrowserAgent:
             self._assert_no_placeholder_payload(amazon_data, eb_result)
 
             overall_success = bool(getattr(eb_result, "success", True))
+            if not overall_success and self._is_nonfatal_eb_skip(eb_result):
+                errors.append(getattr(eb_result, "error_message", "EB task skipped"))
+                overall_success = True
+
+            for warning in getattr(eb_result, "warnings", []) or []:
+                if isinstance(warning, str) and warning not in errors:
+                    errors.append(warning)
+
+            if not overall_success:
+                eb_error = getattr(eb_result, "error_message", None)
+                if isinstance(eb_error, str) and eb_error and eb_error not in errors:
+                    errors.append(eb_error)
 
             execution_time = time.time() - start_time
 

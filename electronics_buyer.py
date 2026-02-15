@@ -124,6 +124,14 @@ class ElectronicsBuyerAgent:
         "unable to",
         "something went wrong",
     )
+    TRACKING_DUPLICATE_TEXT_HINTS = (
+        "already submitted",
+        "already exists",
+        "duplicate",
+        "already added",
+        "tracking number already",
+        "already in use",
+    )
     TRACKING_MODAL_ROOT_SELECTORS = [
         "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k",
         "div.MuiDialog-root.MuiModal-root",
@@ -156,6 +164,9 @@ class ElectronicsBuyerAgent:
     TRACKING_SEMANTIC_NUMBER_KEYWORDS = ("tracking", "awb", "shipment", "waybill")
     TRACKING_SEMANTIC_CONTENT_KEYWORDS = ("package", "content", "item", "description")
     FLAG_REQUIRED_FIELD_MISSING = "FLAG_REQUIRED_FIELD_MISSING"
+    FLAG_DUPLICATE_TRACKING = "FLAG_DUPLICATE_TRACKING"
+    FLAG_TRACKING_SUBMIT_ERROR = "FLAG_TRACKING_SUBMIT_ERROR"
+    FLAG_NO_SUCCESS_SIGNAL = "FLAG_NO_SUCCESS_SIGNAL"
 
     def __init__(self):
         ensure_browser_runtime_compatibility()
@@ -165,6 +176,52 @@ class ElectronicsBuyerAgent:
     @staticmethod
     def _flagged_error(flag: str, message: str) -> str:
         return f"{flag}: {message}"
+
+    @staticmethod
+    def _extract_flag(error_message: str | None) -> str | None:
+        if not error_message or not isinstance(error_message, str):
+            return None
+        candidate = error_message.split(":", 1)[0].strip()
+        if candidate.startswith("FLAG_"):
+            return candidate
+        return None
+
+    @staticmethod
+    def _strip_flag_prefix(error_message: str | None) -> str:
+        if not error_message or not isinstance(error_message, str):
+            return ""
+        if error_message.startswith("FLAG_") and ":" in error_message:
+            return error_message.split(":", 1)[1].strip()
+        return error_message
+
+    def _result_has_flag(self, result: EBTrackingResult | None, flag: str) -> bool:
+        if not result:
+            return False
+        if flag in (result.warnings or []):
+            return True
+        return self._extract_flag(result.error_message) == flag
+
+    def _tracking_failure(self, flag: str, message: str) -> EBTrackingResult:
+        return EBTrackingResult(
+            success=False,
+            tracking_id=None,
+            error_message=self._flagged_error(flag, message),
+            warnings=[flag],
+        )
+
+    def _classify_tracking_page_failure(self, body: str, page_url: str) -> EBTrackingResult | None:
+        lower = (body or "").lower()
+        if any(term in lower for term in self.TRACKING_DUPLICATE_TEXT_HINTS):
+            return self._tracking_failure(
+                self.FLAG_DUPLICATE_TRACKING,
+                f"Tracking appears to be already submitted on EB. URL: {page_url}",
+            )
+        if any(term in lower for term in self.TRACKING_ERROR_TEXT_HINTS):
+            return self._tracking_failure(
+                self.FLAG_TRACKING_SUBMIT_ERROR,
+                f"EB tracking page showed an error state after submit. URL: {page_url}",
+            )
+        return None
 
     async def _selector_exists(self, page: Page, selector: str) -> bool:
         return await page.locator(selector).count() > 0
@@ -633,7 +690,7 @@ class ElectronicsBuyerAgent:
         ready, readiness_state = await self._wait_for_tracking_readiness(page, timeout_seconds=20)
         logger.info("EB tracking readiness=%s detail=%s url=%s", ready, readiness_state, page.url)
         if not ready:
-            return EBTrackingResult(success=False, tracking_id=None, error_message=readiness_state)
+            return self._tracking_failure(self.FLAG_TRACKING_SUBMIT_ERROR, readiness_state)
 
         modal = await self._open_tracking_modal_if_needed(page)
         if not modal:
@@ -658,10 +715,10 @@ class ElectronicsBuyerAgent:
             prefer_textarea=False,
         )
         if not tracking_filled:
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message=f"{tracking_error} page={page.url}",
+            flag = self._extract_flag(tracking_error) or self.FLAG_REQUIRED_FIELD_MISSING
+            return self._tracking_failure(
+                flag,
+                f"{self._strip_flag_prefix(tracking_error)} page={page.url}",
             )
 
         contents_filled, contents_error = await self._fill_required_tracking_field(
@@ -675,18 +732,17 @@ class ElectronicsBuyerAgent:
             prefer_textarea=True,
         )
         if not contents_filled:
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message=f"{contents_error} page={page.url}",
+            flag = self._extract_flag(contents_error) or self.FLAG_REQUIRED_FIELD_MISSING
+            return self._tracking_failure(
+                flag,
+                f"{self._strip_flag_prefix(contents_error)} page={page.url}",
             )
 
         insured_after_fill = await self._read_first_input_value_scoped(page, modal, self.TRACKING_MODAL_INSURED_SELECTORS)
         if (insured_after_fill or "").strip() != (insured_before or "").strip():
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message="Insured value changed during deterministic fill; aborting submit.",
+            return self._tracking_failure(
+                self.FLAG_TRACKING_SUBMIT_ERROR,
+                "Insured value changed during deterministic fill; aborting submit.",
             )
 
         submitted, submit_error = await self._click_first_enabled_scoped(
@@ -696,30 +752,25 @@ class ElectronicsBuyerAgent:
             timeout_seconds=10,
         )
         if not submitted:
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message=submit_error or f"Final tracking submit button not found in modal on page: {page.url}",
+            return self._tracking_failure(
+                self.FLAG_TRACKING_SUBMIT_ERROR,
+                submit_error or f"Final tracking submit button not found in modal on page: {page.url}",
             )
 
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:
             current_path = self._path(page.url)
             if current_path == "/app/login":
-                return EBTrackingResult(
-                    success=False,
-                    tracking_id=None,
-                    error_message=f"Tracking submit redirected to login: {page.url}",
+                return self._tracking_failure(
+                    self.FLAG_TRACKING_SUBMIT_ERROR,
+                    f"Tracking submit redirected to login: {page.url}",
                 )
 
             body = await self._safe_page_text(page)
             lower = body.lower()
-            if any(term in lower for term in self.TRACKING_ERROR_TEXT_HINTS):
-                return EBTrackingResult(
-                    success=False,
-                    tracking_id=None,
-                    error_message=f"EB tracking page showed an error state after submit. URL: {page.url}",
-                )
+            classified_failure = self._classify_tracking_page_failure(body, page.url)
+            if classified_failure:
+                return classified_failure
 
             modal_still_open = await self._has_visible_tracking_modal(page)
             success_hint_visible = any(term in lower for term in self.TRACKING_SUCCESS_TEXT_HINTS)
@@ -757,28 +808,22 @@ class ElectronicsBuyerAgent:
             self.TRACKING_MODAL_NUMBER_SELECTORS,
         )
         if modal_after_wait and persisted_value and tracking_number in persisted_value:
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message=(
+            return self._tracking_failure(
+                self.FLAG_NO_SUCCESS_SIGNAL,
+                (
                     "No success signal after tracking submit; modal stayed open and tracking field still "
                     f"contains submitted value. URL: {page.url}"
                 ),
             )
 
         final_body = await self._safe_page_text(page)
-        final_lower = final_body.lower()
-        if any(term in final_lower for term in self.TRACKING_ERROR_TEXT_HINTS):
-            return EBTrackingResult(
-                success=False,
-                tracking_id=None,
-                error_message=f"Tracking submit ended in error-like state. URL: {page.url}",
-            )
+        final_classified_failure = self._classify_tracking_page_failure(final_body, page.url)
+        if final_classified_failure:
+            return final_classified_failure
 
-        return EBTrackingResult(
-            success=False,
-            tracking_id=None,
-            error_message=f"Tracking submit did not reach a confirmed success state. URL: {page.url}",
+        return self._tracking_failure(
+            self.FLAG_NO_SUCCESS_SIGNAL,
+            f"Tracking submit did not reach a confirmed success state. URL: {page.url}",
         )
 
     async def _wait_for_deals_readiness(self, page: Page, timeout_seconds: int = 12) -> tuple[bool, str]:
@@ -819,11 +864,14 @@ class ElectronicsBuyerAgent:
                 auth_error = await self._ensure_authenticated_app(page)
                 if auth_error:
                     logger.info("EB tracking gate failed during auth: %s", auth_error)
-                    return EBTrackingResult(success=False, tracking_id=None, error_message=auth_error)
+                    return self._tracking_failure(self.FLAG_TRACKING_SUBMIT_ERROR, auth_error)
 
                 await page.goto(EB_TRACKING_URL, wait_until="domcontentloaded")
                 first_attempt = await self._submit_tracking_deterministic_once(page, tracking_number, items_str)
                 if first_attempt.success:
+                    return first_attempt
+                if self._result_has_flag(first_attempt, self.FLAG_DUPLICATE_TRACKING):
+                    logger.info("EB tracking duplicate detected on first attempt; blocking retry.")
                     return first_attempt
 
                 logger.info(
@@ -834,15 +882,29 @@ class ElectronicsBuyerAgent:
                 retry_attempt = await self._submit_tracking_deterministic_once(page, tracking_number, items_str)
                 if retry_attempt.success:
                     return retry_attempt
+                if self._result_has_flag(retry_attempt, self.FLAG_DUPLICATE_TRACKING):
+                    logger.info("EB tracking duplicate detected on retry; returning duplicate block.")
+                    return retry_attempt
 
+                warnings = list(
+                    dict.fromkeys(
+                        (first_attempt.warnings or [])
+                        + (retry_attempt.warnings or [])
+                        + [self.FLAG_NO_SUCCESS_SIGNAL]
+                    )
+                )
                 return EBTrackingResult(
                     success=False,
                     tracking_id=None,
-                    error_message=(
-                        "Deterministic tracking submission failed after 2 attempts. "
-                        f"first_error={first_attempt.error_message!r}; "
-                        f"second_error={retry_attempt.error_message!r}"
+                    error_message=self._flagged_error(
+                        self.FLAG_NO_SUCCESS_SIGNAL,
+                        (
+                            "Deterministic tracking submission failed after 2 attempts. "
+                            f"first_error={first_attempt.error_message!r}; "
+                            f"second_error={retry_attempt.error_message!r}"
+                        ),
                     ),
+                    warnings=warnings,
                 )
             finally:
                 await context.close()
