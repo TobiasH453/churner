@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from playwright.async_api import Locator, Page, async_playwright
 
 from electronics_buyer_llm import ElectronicsBuyerLLMExecutor
+from eb_contracts import FLAG_DEAL_TIMEOUT
 from models import EBDealResult, EBTrackingResult
 from runtime_checks import ensure_browser_runtime_compatibility
 from stealth_utils import STEALTH_BROWSER_ARGS, STEALTH_IGNORE_DEFAULT_ARGS, get_chromium_executable
@@ -942,7 +943,19 @@ class ElectronicsBuyerAgent:
                 await context.close()
 
         logger.info("EB deals deterministic auth priming complete; starting LLM deals executor.")
-        return await self.llm_executor.submit_deal(
-            items=items,
-            quantities=quantities,
-        )
+        try:
+            return await asyncio.wait_for(
+                self.llm_executor.submit_deal(
+                    items=items,
+                    quantities=quantities,
+                ),
+                timeout=70,
+            )
+        except asyncio.TimeoutError:
+            return EBDealResult(
+                success=False,
+                deal_id=None,
+                payout_value=0.0,
+                error_message=f"{FLAG_DEAL_TIMEOUT}: EB deal submission timed out after 70s",
+                warnings=[FLAG_DEAL_TIMEOUT],
+            )

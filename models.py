@@ -37,6 +37,10 @@ class EBDealResult(BaseModel):
     deal_id: Optional[str] = None
     payout_value: float  # Calculated cashout value
     error_message: Optional[str] = None
+    warnings: List[str] = Field(default_factory=list)
+    unmatched_items: List[str] = Field(default_factory=list)
+    submitted_items: List[str] = Field(default_factory=list)
+    payout_captured_items: List[str] = Field(default_factory=list)
 
 class EBTrackingResult(BaseModel):
     """Result from electronicsbuyer.gg tracking submission"""
