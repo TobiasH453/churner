@@ -68,7 +68,7 @@ No secret values are printed by installer output.
 At the end of install, the script prints:
 - `Done` checklist
 - `Remaining` checklist
-- `Next command`
+- `Next command` (service startup)
 
 Current runtime handoff command:
 
@@ -76,8 +76,19 @@ Current runtime handoff command:
 bash scripts/services-up.sh
 ```
 
-Then confirm runtime status:
+Then run readiness self-check:
 
 ```bash
-bash scripts/services-status.sh
+bash scripts/installer-self-check.sh
+```
+
+Self-check is the final Phase 1 readiness gate. It always prints:
+- `RESULT: PASS` or `RESULT: FAIL`
+- `READY FOR SMOKE VERIFICATION` or `NOT READY FOR SMOKE VERIFICATION`
+- `NEXT COMMAND: bash scripts/services-status.sh` on pass
+
+If self-check fails, fix reported blockers and rerun:
+
+```bash
+bash scripts/installer-self-check.sh
 ```
