@@ -1,80 +1,72 @@
-# Requirements: Amazon Email Automation
+# Requirements: 1step_cashouts
 
-**Defined:** 2026-02-12
-**Core Value:** Browser automation must successfully navigate Amazon and extract real order/shipping data - not placeholders
+**Defined:** 2026-02-17
+**Core Value:** A new Mac user can install and run the workflow locally in under 20 minutes, with both order-confirmation and shipping-confirmation paths working end-to-end.
 
 ## v1 Requirements
 
-### Critical Fixes (Must Complete First)
+Requirements for initial release. Each maps to roadmap phases.
 
-- [ ] **FIX-01**: Add `output_model_schema` parameter to amazon_scraper.py Agent with OrderDetails/ShippingDetails Pydantic models
-- [ ] **FIX-02**: Remove redundant login steps from task prompts (trust persistent session)
-- [ ] **FIX-03**: Replace `except Exception` placeholder returns with proper error raising
-- [ ] **FIX-04**: Validate `result.extracted_content` is not empty before returning data
+### Installer & Onboarding
 
-### Data Extraction (Core Capability)
+- [ ] **INST-01**: Operator can run a single `install.sh` command that checks required macOS prerequisites before making changes.
+- [ ] **INST-02**: Operator can complete initial setup on a fresh Mac in 20 minutes or less using the documented default path.
+- [ ] **INST-03**: Operator can start all required services with one documented command path after installation.
 
-- [ ] **EXTRACT-01**: Parse Amazon order confirmation for: items, quantities, prices, cashback %, arrival date
-- [ ] **EXTRACT-02**: Parse Amazon shipping confirmation for: tracking number, carrier, delivery date
-- [ ] **EXTRACT-03**: Validate extracted data semantically (prices > $0, valid dates, tracking format)
-- [ ] **EXTRACT-04**: Normalize item format to natural language ("3x iPad 128GB Blue")
+### Security & Secrets
 
-### Reliability (95%+ Success Target)
+- [ ] **SECR-01**: Operator can create local runtime config from a committed `.env.example` without exposing secret values in command output.
+- [ ] **SECR-02**: Operator can run a validator that confirms required secrets/config are present and plausibly formatted without printing secret contents.
+- [ ] **SECR-03**: Distributed package excludes browser profile/session state and secret-bearing files by default.
 
-- [ ] **RELIABLE-01**: Implement retry logic with exponential backoff (3 attempts: 1s, 2s, 4s)
-- [ ] **RELIABLE-02**: Increase timeouts (step_timeout=180s, max_failures=6)
-- [ ] **RELIABLE-03**: Add debug artifacts (GIF recording, conversation logs) for troubleshooting
-- [ ] **RELIABLE-04**: Session validation before agent runs (check cookies, trigger re-login if expired)
+### n8n Workflow Integration
 
-### ElectronicsBuyer Integration
+- [ ] **N8N-01**: Operator can import a versioned workflow JSON file from `n8n-workflows/` into n8n using documented steps.
+- [ ] **N8N-02**: Imported workflow sends payloads that match `/process-order` contract fields required by the API.
+- [ ] **N8N-03**: Operator can follow a guide that connects n8n workflow setup to API runtime setup end-to-end.
 
-- [ ] **EB-01**: Submit deal to electronicsbuyer.gg and extract payout value
-- [ ] **EB-02**: Submit tracking to electronicsbuyer.gg
-- [ ] **EB-03**: Handle EB.gg errors gracefully (retry transient, alert fatal)
+### Verification
 
-### Google Sheets Updates
+- [ ] **VER-01**: Operator can run one smoke-test command that verifies API health endpoint availability.
+- [ ] **VER-02**: Smoke test verifies the order-confirmation processing path produces a valid structured response contract.
+- [ ] **VER-03**: Smoke test verifies the shipping-confirmation processing path produces a valid structured response contract.
 
-- [ ] **SHEETS-01**: Append new row for order confirmations (columns A-G, J)
-- [ ] **SHEETS-02**: Update existing row for shipping confirmations (find by order number, update J and M)
+### Supportability
 
-### Notifications
+- [ ] **SUP-01**: Operator has a troubleshooting document with clear recovery paths for common install/runtime failures.
+- [ ] **SUP-02**: Operator can run a diagnostics script that collects actionable logs/config metadata with secret redaction.
 
-- [ ] **NOTIFY-01**: Telegram success notification with key details (order #, items, payout)
-- [ ] **NOTIFY-02**: Telegram error alerts with failure reason
+### Distribution
+
+- [ ] **DIST-01**: Operator can download a package bundle containing everything needed for local macOS setup except secrets and local session state.
+- [ ] **DIST-02**: Package documentation clearly identifies what is included, what must be user-provided, and expected first-run steps.
 
 ## v2 Requirements
 
-Deferred to future milestones after v1 is stable.
+Deferred to future release. Tracked but not in current roadmap.
 
-### Advanced Reliability
+### Platform Expansion
 
-- **RELIABLE-05**: Confidence scoring per extracted field
-- **RELIABLE-06**: Partial success handling (return what parsed + flag missing fields)
-- **RELIABLE-07**: Multi-strategy extraction (fallback to DOM if vision fails)
+- **PLAT-01**: Operator can install and run on Linux with parity to macOS install/verify flow.
+- **PLAT-02**: Operator can install and run on Windows with parity to macOS install/verify flow.
 
-### Monitoring
+### Packaging Enhancements
 
-- **MONITOR-01**: Duplicate detection (SQLite cache of processed order numbers)
-- **MONITOR-02**: Rate limiting (60-90s cooldown between Amazon requests)
-- **MONITOR-03**: Dashboard showing success rates, processing times, error trends
-
-### Advanced Features
-
-- **ADVANCED-01**: Multi-carrier auto-detection (UPS, FedEx, USPS patterns)
-- **ADVANCED-02**: Invoice PDF parsing for complex line items
-- **ADVANCED-03**: Historical email sync (backfill past orders)
+- **PACK-01**: Operator can run the same workflow via Dockerized packaging.
+- **PACK-02**: Operator can bootstrap via optional one-liner download-and-run path.
+- **PACK-03**: Optional macOS Keychain integration can store selected secrets while preserving local-only security model.
 
 ## Out of Scope
 
+Explicitly excluded. Documented to prevent scope creep.
+
 | Feature | Reason |
 |---------|--------|
-| Headless browser mode | User explicitly wants visible supervision |
-| Real-time processing (<1 min) | Triggers Amazon bot detection, 15-min polling acceptable |
-| 100% extraction accuracy | Impossible standard, 95% is industry-proven achievable |
-| CSS selector parsing | Brittle approach, AI agents adapt better to UI changes |
-| Multi-account support | Single Amazon account only, reduces complexity |
-| 2FA automation | Requires manual intervention, acceptable for monthly re-auth |
-| Alternative framework migration | Only if browser-use fundamentally broken after fixes |
+| Linux support in v1 | macOS-first focus to meet shippable target quickly |
+| Windows support in v1 | platform variance would delay stable v1 ship |
+| Docker packaging in v1 | adds packaging complexity beyond current milestone goal |
+| Fully automatic secret provisioning | conflicts with secure local-only secret handling |
+| Fully automatic Amazon/EB auth bypass | external OTP/session controls require user-in-the-loop setup |
 
 ## Traceability
 
@@ -82,31 +74,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | Phase 1 | Pending |
-| FIX-02 | Phase 1 | Pending |
-| FIX-03 | Phase 1 | Pending |
-| FIX-04 | Phase 1 | Pending |
-| EXTRACT-01 | Phase 2 | Pending |
-| EXTRACT-02 | Phase 2 | Pending |
-| EXTRACT-03 | Phase 2 | Pending |
-| EXTRACT-04 | Phase 2 | Pending |
-| RELIABLE-01 | Phase 3 | Pending |
-| RELIABLE-02 | Phase 3 | Pending |
-| RELIABLE-03 | Phase 3 | Pending |
-| RELIABLE-04 | Phase 3 | Pending |
-| EB-01 | Phase 4 | Pending |
-| EB-02 | Phase 4 | Pending |
-| EB-03 | Phase 4 | Pending |
-| SHEETS-01 | Phase 5 | Pending |
-| SHEETS-02 | Phase 5 | Pending |
-| NOTIFY-01 | Phase 5 | Pending |
-| NOTIFY-02 | Phase 5 | Pending |
+| INST-01 | TBD | Pending |
+| INST-02 | TBD | Pending |
+| INST-03 | TBD | Pending |
+| SECR-01 | TBD | Pending |
+| SECR-02 | TBD | Pending |
+| SECR-03 | TBD | Pending |
+| N8N-01 | TBD | Pending |
+| N8N-02 | TBD | Pending |
+| N8N-03 | TBD | Pending |
+| VER-01 | TBD | Pending |
+| VER-02 | TBD | Pending |
+| VER-03 | TBD | Pending |
+| SUP-01 | TBD | Pending |
+| SUP-02 | TBD | Pending |
+| DIST-01 | TBD | Pending |
+| DIST-02 | TBD | Pending |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 19 (100% coverage)
-- Unmapped: 0
+- v1 requirements: 16 total
+- Mapped to phases: 0
+- Unmapped: 16 ⚠️
 
 ---
-*Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after roadmap creation*
+*Requirements defined: 2026-02-17*
+*Last updated: 2026-02-17 after initial definition*
