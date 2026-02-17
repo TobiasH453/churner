@@ -1,0 +1,29 @@
+# Secret material
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local runtime/session state
+.n8n/
+.pm2/
+logs/
+data/browser-profile/
+data/browser-profile-personal/
+data/browser-profile-business/
+
+# Local cache/build/test artifacts
+__pycache__/
+.pycache/
+*.pyc
+*.pyo
+venv/
+venv39/
+venv314/
+
+# Local tooling metadata
+.codex/
+.claude/
+.DS_Store
