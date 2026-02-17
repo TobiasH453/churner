@@ -10,7 +10,7 @@ This roadmap turns an already-working local automation system into a shippable m
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
+- [x] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
 - [ ] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
 - [ ] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
 - [ ] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
@@ -31,10 +31,10 @@ This roadmap turns an already-working local automation system into a shippable m
 **Plans**: 4 plans
 
 Plans:
-- [ ] 01-01: Build prerequisite detection and install flow skeleton
-- [ ] 01-02: Implement secure env template/bootstrap validation
-- [ ] 01-03: Add package exclusion rules for sensitive state
-- [ ] 01-04: Validate clean-machine timing and installer reliability
+- [x] 01-01: Build prerequisite detection and install flow skeleton
+- [x] 01-02: Implement secure env template/bootstrap validation
+- [x] 01-03: Add package exclusion rules for sensitive state
+- [x] 01-04: Validate clean-machine timing and installer reliability
 
 ### Phase 2: Runtime Service Operations
 **Goal**: Users can consistently run and observe required services with a stable command surface.
@@ -113,7 +113,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Installer & Secure Bootstrap | 0/4 | Not started | - |
+| 1. Installer & Secure Bootstrap | 4/4 | Complete | 2026-02-17 |
 | 2. Runtime Service Operations | 0/2 | Not started | - |
 | 3. n8n Workflow Packaging & Contract Alignment | 0/3 | Not started | - |
 | 4. Smoke Verification Harness | 0/3 | Not started | - |
