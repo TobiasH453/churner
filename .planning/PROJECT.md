@@ -1,118 +1,67 @@
-# Amazon Email Automation
+# 1step_cashouts
 
 ## What This Is
 
-A business automation system that processes Amazon order and shipping confirmation emails autonomously. The system monitors Gmail via n8n, qualifies emails using AI, then uses Python browser automation to scrape data from Amazon and electronicsbuyer.gg, updating Google Sheets and sending Telegram notifications. Currently operational through n8n → Python webhook layer, blocked on browser automation stability.
+1step_cashouts is a local macOS automation package that processes Amazon order and shipping confirmation emails through an n8n workflow, scrapes Amazon details, and submits required data to ElectronicsBuyer. It is aimed at semi-technical and non-technical users who can follow clear instructions but should not need to assemble the system manually. The focus is turning the existing working workflow into a shippable, downloadable, secure, and repeatable setup.
 
 ## Core Value
 
-Browser automation must successfully navigate Amazon and extract real order/shipping data - not placeholders. Without reliable data extraction, the entire downstream workflow (electronicsbuyer.gg submission, Sheet updates, notifications) processes invalid data.
+A new Mac user can install and run the workflow locally in under 20 minutes, with both order-confirmation and shipping-confirmation paths working end-to-end.
 
 ## Requirements
 
 ### Validated
 
-**Working infrastructure (Phases 1-2 complete):**
-- ✓ n8n workflow orchestration installed and running — Phase 1
-- ✓ Python FastAPI webhook server receives POST requests successfully — Phase 2
-- ✓ n8n Gmail trigger, Claude qualification, HTTP Request node working — Phase 2
-- ✓ Email data correctly formatted and sent to Python server — Phase 2
-- ✓ Browser profile and cookie persistence configured — Phase 2
-- ✓ Python environment with browser-use, Playwright, Anthropic SDK — Phase 1
+- ✓ Receive and process `order_confirmation` and `shipping_confirmation` payloads via FastAPI `POST /process-order` — existing
+- ✓ Route Amazon automation by account type (`amz_personal` vs `amz_business`) with separate persistent profiles — existing
+- ✓ Scrape Amazon order/tracking data with deterministic Playwright flows and typed response contracts — existing
+- ✓ Submit ElectronicsBuyer tracking with deterministic auth gate, flag-based failure semantics, and bounded retry behavior — existing
+- ✓ Run local operations through PM2-managed services (`amazon-agent`, `n8n-server`) with health/status scripts — existing
+- ✓ Maintain operational runbook and contract-style regression checks for fragile automation logic — existing
 
 ### Active
 
-**Browser automation layer (currently blocked):**
-- [ ] Browser-use agent stays open and navigates Amazon (currently crashes after opening)
-- [ ] Scrape Amazon order confirmation: items, quantities, prices, cashback %, arrival date
-- [ ] Scrape Amazon shipping confirmation: tracking number, carrier, delivery date
-- [ ] Parse extracted content into structured OrderDetails/ShippingDetails models (currently returns NEEDS_PARSING placeholders)
-- [ ] Submit deal to electronicsbuyer.gg and extract payout value
-- [ ] Submit tracking to electronicsbuyer.gg
-- [ ] Return parsed data to n8n for Google Sheets update
-- [ ] Error handling that propagates failures (not silent placeholders)
-
-**Integration layer:**
-- [ ] Google Sheets append for order confirmations (columns A-G, J)
-- [ ] Google Sheets update for shipping confirmations (find by order number, update J and M)
-- [ ] Telegram success notifications
-- [ ] Telegram error alerts
-
-**Reliability:**
-- [ ] 95%+ success rate on email processing
-- [ ] Retry logic for transient failures
-- [ ] Graceful error handling with user-visible alerts
-- [ ] Processing time <5 minutes per email
+- [ ] Ship a one-step local installer flow (`install.sh`) suitable for semi-technical users on macOS
+- [ ] Optionally support one-command bootstrap in addition to `install.sh` for faster onboarding
+- [ ] Include importable n8n workflow artifact(s) and a clear setup guide for n8n integration
+- [ ] Add secure secrets/bootstrap flow (template + validation) without exposing secret values
+- [ ] Provide a downloadable distribution format with clear installation and usage instructions
+- [ ] Provide one smoke-test command that verifies health + order confirmation path + shipping confirmation path
+- [ ] Provide troubleshooting documentation and a diagnostics collection script for support cases
 
 ### Out of Scope
 
-- Mobile app interface — Web automation only
-- Real-time processing — 15-minute polling acceptable
-- Multi-account support — Single Amazon account only
-- Historical email processing — Future emails only
-- Automatic 2FA handling — Manual intervention acceptable for auth challenges
+- Linux/Windows support in v1 — macOS-first ship target
+- Docker packaging in v1 — local runtime and PM2 flow prioritized
+- Fully automatic secret provisioning — security risk and environment-specific complexity
+- Fully automatic bypass of Amazon/EB login challenges — external auth controls require user-in-the-loop session setup
 
 ## Context
 
-**Existing Documentation:**
-- `CLAUDE.md` — Complete project overview, business rules, architecture decisions, troubleshooting
-- `IMPLEMENTATION_PLAN.md` — 8-phase implementation plan with exact commands
-- `.planning/codebase/` — Codebase analysis (STACK.md, ARCHITECTURE.md, CONCERNS.md, etc.)
+This is a brownfield project: core workflow logic already exists and runs locally with FastAPI, Playwright/browser-use, PM2, and n8n. The repository already contains operational scripts (`scripts/services-*.sh`), environment bootstrap expectations (`requirements.txt`, `.env`), and persistent browser profile storage (`data/browser-profile*`). Codebase mapping has been completed in `.planning/codebase/` and confirms the system architecture and current integrations.
 
-**Current Blocker:**
-Browser opens to Amazon homepage then closes within seconds. No Python errors shown, but returns placeholder "NEEDS_PARSING" data. Testing via n8n webhook with real email data.
-
-**Key Business Rules (from CLAUDE.md):**
-- ONLY process emails where recipient is "CSC LLC" OR "CSG"
-- REJECT California addresses and "Tobias Halpern"
-- Order confirmations → scrape invoice, submit deal to EB.gg, append Sheet row
-- Shipping confirmations → scrape tracking, submit to EB.gg, update existing Sheet row
-
-**Architecture:**
-```
-Gmail → n8n (orchestration) → Python FastAPI (browser automation) → Google Sheets
-                                        ↓
-                             Amazon + electronicsbuyer.gg
-                                        ↓
-                                  Telegram alerts
-```
-
-**Critical Files:**
-- `main.py` — FastAPI webhook server (port 8080)
-- `browser_agent.py` — Routes order vs shipping, coordinates scrapers
-- `amazon_scraper.py` — browser-use agent for Amazon navigation (BROKEN)
-- `electronics_buyer.py` — browser-use agent for EB.gg (untested)
-- `models.py` — Pydantic data models (OrderDetails, ShippingDetails, etc.)
-- `data/amazon_cookies.json` — Saved session (already configured)
-
-**Known Issues (from CONCERNS.md):**
-- Data parsing completely stubbed (lines 75-91, 136-142 in amazon_scraper.py)
-- Broad exception handling masks real errors
-- LLM timeout set to 60s (may be too low)
-- No retry logic implemented despite MAX_RETRIES env var
-- Agent max_actions_per_step may be too low (3 for orders, 5 for shipping)
+The current milestone is not feature invention; it is productization and distribution hardening. The user goal is to make the existing automation reliably downloadable and operable by non-technical users with clear guardrails, secure defaults, and clear recovery instructions.
 
 ## Constraints
 
-- **Platform**: macOS (Darwin 25.2.0), must run locally on MacBook 24/7
-- **Browser**: Visible mode (headless=false) for supervision
-- **API Costs**: Minimize Claude API calls where possible, budget $5-15/month
-- **Reliability**: 95%+ success rate critical - this processes real business transactions
-- **User Skill**: Beginner technical level - needs copy/paste commands, clear error messages
-- **Dependencies**: Python 3.9.6, Node.js 22.22.0, n8n, pm2, browser-use 0.1.15+
-- **Authentication**: Amazon session cookies (monthly refresh), EB.gg username/password
-- **Processing Time**: Target <5 minutes per email, <20 minutes end-to-end
+- **Platform**: macOS first — initial release targets fastest path to real users
+- **User profile**: Non-technical to semi-technical local operators — setup must be guided and low-friction
+- **Setup time**: Fresh-machine setup must complete within 20 minutes — onboarding cannot be open-ended
+- **Security**: Secrets must stay local and never be committed/bundled — secure-by-default distribution is required
+- **Architecture continuity**: Keep existing local FastAPI + n8n + Playwright/PM2 model for v1 — avoid major platform rewrite during ship-hardening
+- **Verification**: Both order and shipping workflows must be demonstrably testable after install — ship criteria requires end-to-end functional proof
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Hybrid n8n + Python architecture | n8n handles integrations visually, Python handles complex browser work | ✓ Good - n8n layer working, Python layer needs debugging |
-| browser-use library with Claude | AI-powered navigation more reliable than brittle selectors | — Pending - library works but agent crashes immediately |
-| Visible browser mode | User wants supervision, easier debugging | ✓ Good - can see browser open to Amazon before crash |
-| Local execution (not cloud) | Privacy, supervision, no deployment complexity | ✓ Good - matches user's comfort level |
-| FastAPI webhook bridge | Decouples n8n from browser automation, easier testing | ✓ Good - clean separation, webhook working |
-| Cookie-based Amazon auth | Avoid login on every request, session persistence | — Pending - cookies saved but browser exits before using them |
+| Product name is `1step_cashouts` | Aligns project identity with one-step shipping goal | — Pending |
+| v1 packaging prioritizes one-step local installer | Lowest cognitive overhead for non-technical users | — Pending |
+| Keep optional one-command bootstrap as secondary path | Helpful acceleration without replacing primary guided flow | — Pending |
+| Include importable n8n workflow + guide (not auto-import) | Easier and lower-risk than brittle automation of n8n UI/import paths | — Pending |
+| Enforce strict secret handling baseline | User explicitly prioritized secure shipping posture | — Pending |
+| Provide smoke test + troubleshooting docs + diagnostics script in v1 | Required for supportability and confidence after install | — Pending |
+| Confirm explicit v1 exclusions (no Linux/Windows, no Docker, no full auth bypass) | Prevents scope creep and protects timeline | — Pending |
 
 ---
-*Last updated: 2026-02-12 after initialization*
+*Last updated: 2026-02-17 after initialization*
