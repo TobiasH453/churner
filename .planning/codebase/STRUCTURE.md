@@ -1,101 +1,124 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-02-13
+**Analysis Date:** 2026-02-17
 
 ## Directory Layout
 
-```text
-.
-|- main.py
-|- browser_agent.py
-|- amazon_scraper.py
-|- electronics_buyer.py
-|- models.py
-|- utils.py
-|- stealth_utils.py
-|- manual_login.py
-|- test_scraper.py
-|- test_debug.py
-|- test_diagnose.py
-|- requirements.txt
-|- docs/
-|- prompts/
-|- get-shit-done/
-|- .planning/
-|- data/
-|- logs/
-|- n8n-workflows/
-|- venv/
+```
+amazon-email-automation ship/
+├── amazon_scraper.py                # Amazon deterministic scraping logic
+├── browser_agent.py                 # Top-level orchestration router
+├── electronics_buyer.py             # EB deterministic auth + tracking/deal gateways
+├── electronics_buyer_llm.py         # EB browser-use constrained executor
+├── main.py                          # FastAPI service entrypoint
+├── models.py                        # Pydantic domain contracts
+├── eb_contracts.py                  # Deal-result semantic contract enforcement
+├── utils.py                         # env loading + shared logger + local state helpers
+├── stealth_utils.py                 # Playwright/browser-use stealth profile helpers
+├── runtime_checks.py                # runtime compatibility warnings
+├── scripts/                         # PM2 operations helpers
+├── docs/                            # runbook and operational docs
+├── data/                            # persistent browser profiles and local state
+├── logs/                            # runtime and PM2 logs
+├── n8n-workflows/                   # exported n8n artifacts (currently empty)
+├── requirements.txt                 # Python dependencies
+├── ecosystem.config.js              # PM2 app definitions
+└── test_*.py                        # script-style regression/contract tests
 ```
 
 ## Directory Purposes
 
-- `.planning/`: active project docs (project context, roadmap/state, and phase plans/summaries).
-- `.planning/phases/`: plan execution artifacts by phase (`01-browser-automation-fix/...`).
-- `.planning/research/`: ecosystem research notes.
-- `docs/`: beginner-oriented operational docs (`docs/QUICKSTART.md`).
-- `get-shit-done/`: reusable workflow/templates/reference library powering GSD prompts.
-- `prompts/`: command prompt entry files (`prompts/gsd-*.md`).
-- `data/`: local persistent runtime state (currently `data/browser-profile/`).
-- `logs/`: runtime/debug outputs from API and browser agents.
-- `n8n-workflows/`: placeholder for exported workflow JSON.
+**`scripts/`:**
+- Purpose: service lifecycle and environment utilities
+- Contains: `services-up.sh`, `services-down.sh`, `services-status.sh`, `services-logs.sh`, `rebuild_py39_env.sh`
+- Key files: PM2 start/stop/status wrappers
+
+**`docs/`:**
+- Purpose: operations documentation
+- Contains: `OPERATIONS.md`
+- Key files: runbook for startup, recovery, and persistence safety
+
+**`data/`:**
+- Purpose: persistent browser profiles/session state
+- Contains: `browser-profile/`, `browser-profile-personal/`, `browser-profile-business/`
+- Key behavior: deleting these forces re-authentication
+
+**`logs/`:**
+- Purpose: runtime logs and PM2 output/error files
+- Contains: `agent.log`, `pm2-*.log`, generated gif/conversation artifacts
 
 ## Key File Locations
 
-**Runtime API + Orchestration:**
-- `main.py` - FastAPI routes and process startup.
-- `browser_agent.py` - branch routing for order/shipping handling.
+**Entry Points:**
+- `main.py` - FastAPI application entrypoint
+- `manual_login.py` - manual profile login utility
 
-**Website Automation:**
-- `amazon_scraper.py` - Amazon extraction tasks.
-- `electronics_buyer.py` - ElectronicsBuyer submission tasks.
-- `stealth_utils.py` - browser profile/executable selection logic.
-- `manual_login.py` - manual session bootstrap utility.
+**Configuration:**
+- `.env` - runtime secrets/environment
+- `requirements.txt` - Python dependency manifest
+- `ecosystem.config.js` - PM2 runtime config
 
-**Contracts + Utilities:**
-- `models.py` - all Pydantic request/response models.
-- `utils.py` - env loading, logging config, and lightweight local persistence helpers.
+**Core Logic:**
+- `browser_agent.py` - orchestrates email type flows
+- `amazon_scraper.py` - Amazon extraction and fallback logic
+- `electronics_buyer.py` - deterministic EB auth + submit wrappers
+- `electronics_buyer_llm.py` - constrained browser-use deal/tracking tasks
 
-**Testing/Diagnostics:**
-- `test_scraper.py` - main smoke test for order/shipping scraping.
-- `test_debug.py` - debug logging focused probe.
-- `test_diagnose.py` - no-schema visual diagnosis helper.
+**Testing:**
+- `test_*.py` at repository root (contract + diagnostic scripts)
 
-**Planning Framework:**
-- `get-shit-done/workflows/*.md` - workflow logic.
-- `get-shit-done/templates/codebase/*.md` - templates for codebase docs.
+**Documentation:**
+- `README.md` - service overview and quickstart
+- `docs/OPERATIONS.md` - operational runbook
 
 ## Naming Conventions
 
-- Snake_case for Python modules and functions (`browser_agent.py`, `scrape_shipping_confirmation`).
-- PascalCase for classes/models (`BrowserAgent`, `OrderDetails`).
-- Environment variable names are uppercase snake case (`ANTHROPIC_API_KEY`).
-- Test helpers use `test_*.py` prefix but behave as executable scripts.
+**Files:**
+- Python modules use `snake_case.py`
+- Test scripts follow `test_*.py`
+- Markdown docs use uppercase canonical names in `.planning/codebase/*.md`
+
+**Directories:**
+- lowercase with hyphen or simple words (`docs`, `scripts`, `n8n-workflows`)
+
+**Special Patterns:**
+- Root-level operational scripts instead of nested package layout
+- Browser profile directories treated as runtime state, not source code
 
 ## Where to Add New Code
 
-- New API endpoints: `main.py` (or split to dedicated route modules if API grows).
-- New orchestration branch logic: `browser_agent.py`.
-- New external site automation adapter: add module parallel to `amazon_scraper.py` / `electronics_buyer.py`.
-- New shared data contracts: `models.py`.
-- New operational helpers/utilities: `utils.py` or focused helper module.
-- New automated tests: convert/add under a dedicated `tests/` directory (currently absent).
+**New API endpoint:**
+- Implementation: `main.py`
+- Orchestration logic: `browser_agent.py`
+- Contracts: `models.py`
+- Tests: add `test_<feature>_contract.py` at root
+
+**New Amazon extraction rule:**
+- Primary implementation: `amazon_scraper.py`
+- Regression checks: add/extend static or AST contract tests
+
+**New EB flow safeguards:**
+- Deterministic safeguards: `electronics_buyer.py`
+- LLM task constraints: `electronics_buyer_llm.py`
+- Semantic result checks: `eb_contracts.py`
+
+**Operational changes:**
+- Process settings: `ecosystem.config.js`
+- Commands/runbook: `scripts/` and `docs/OPERATIONS.md`
 
 ## Special Directories
 
-- `data/browser-profile/`: required for persistent browser-auth sessions.
-- `logs/`: contains GIF and JSON traces useful for post-failure inspection.
-- `venv/`: local virtual environment (not source-controlled).
-- `.git/`: repository metadata.
+**`venv/`, `venv39/`, `venv314/`:**
+- Purpose: local Python virtual environments
+- Source: manually created by scripts
+- Committed: no (environment artifacts)
 
-## GSD Context Additions
-
-**Planning/Execution Artifacts:**
-- `.planning/PROJECT.md`, `.planning/STATE.md`, `.planning/ROADMAP.md` are active control files for ongoing work sequencing.
-- `.planning/phases/01-browser-automation-fix/` contains active PLAN/SUMMARY execution artifacts tied to current implementation state.
-- `prompts/gsd-*.md` and `get-shit-done/workflows/*.md` are operational command/workflow assets used to drive iterative changes.
+**`__pycache__/`:**
+- Purpose: Python bytecode cache
+- Source: runtime generated
+- Committed: no
 
 ---
 
-*Structure analysis: 2026-02-13*
-*Update after directory moves, new top-level modules, or test layout changes*
+*Structure analysis: 2026-02-17*
+*Update when directory structure changes*

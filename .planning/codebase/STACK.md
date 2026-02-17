@@ -1,88 +1,80 @@
 # Technology Stack
 
-**Analysis Date:** 2026-02-13
+**Analysis Date:** 2026-02-17
 
 ## Languages
 
 **Primary:**
-- Python 3.9+ - All runtime code in `main.py`, `browser_agent.py`, `amazon_scraper.py`, `electronics_buyer.py`, and support modules.
+- Python 3.11+ (currently targeted at 3.14 in scripts) - all runtime logic in `main.py`, `browser_agent.py`, `amazon_scraper.py`, `electronics_buyer.py`
 
 **Secondary:**
-- Markdown - Operational workflow docs in `.planning/`, `get-shit-done/`, and `prompts/`.
-- JSON - Runtime/debug artifacts in `logs/*.json` and local state files under `data/`.
+- JavaScript (Node.js ecosystem) - PM2 process manager config in `ecosystem.config.js`
+- Bash - operational scripts in `scripts/services-*.sh`
 
 ## Runtime
 
 **Environment:**
-- CPython (local virtualenv at `venv/`).
-- ASGI server via Uvicorn for webhook handling in `main.py`.
-- Browser runtime via Playwright Chromium launched by `browser-use` through `stealth_utils.py`.
+- Python virtualenv runtime (`venv314/bin/python` by default in PM2)
+- Browser runtime through Playwright Chromium persistent contexts
+- Node.js runtime for PM2 and `n8n`
 
 **Package Manager:**
-- pip + `requirements.txt`.
-- Lockfile: none detected (`requirements.txt` only).
+- `pip` with dependency list in `requirements.txt`
+- Lockfile: no `poetry.lock`, `Pipfile.lock`, or pinned `requirements` lock generated
 
 ## Frameworks
 
 **Core:**
-- FastAPI - HTTP API endpoints (`main.py`).
-- browser-use - LLM-guided browser automation (`amazon_scraper.py`, `electronics_buyer.py`).
-- Pydantic v2 - request/response and extraction models (`models.py`).
+- FastAPI - webhook API server in `main.py`
+- Playwright (async API) - deterministic browser automation in `amazon_scraper.py` and `electronics_buyer.py`
+- browser-use + Anthropic integration - LLM-driven constrained browser tasks in `electronics_buyer_llm.py`
 
 **Testing:**
-- No formal test framework detected.
-- Script-based diagnostics in `test_scraper.py`, `test_debug.py`, and `test_diagnose.py`.
+- Script-based Python contract tests (no pytest framework)
+- Assertion style with direct `raise AssertionError` + `main()` in `test_*.py`
 
 **Build/Dev:**
-- python-dotenv for env loading (`utils.py`, test scripts).
-- Playwright for persistent browser profile and manual login bootstrap (`manual_login.py`).
+- PM2 process supervision for long-running services via `ecosystem.config.js`
+- No packaging/build step; direct source execution
 
 ## Key Dependencies
 
 **Critical:**
-- `browser-use` - drives multi-step automation agents and structured output.
-- `langchain-anthropic` + `anthropic` - Claude model access for browser reasoning.
-- `playwright` - browser runtime and persistent profile support.
-- `fastapi` + `uvicorn` - webhook API surface consumed by n8n.
-- `pydantic` - schema contracts for email payloads and agent outputs.
+- `fastapi` + `uvicorn` - HTTP server and ASGI runtime
+- `playwright` - browser automation engine and persistent profile contexts
+- `browser-use` - LLM-guided browser action layer
+- `anthropic`, `langchain`, `langchain-anthropic` - Claude model orchestration for browser-use agents
+- `pydantic` - strict request/response and result contracts in `models.py`
 
 **Infrastructure:**
-- `python-dotenv` - config ingestion from `.env`.
-- `httpx`/`requests`/`beautifulsoup4`/`python-telegram-bot` are listed in `requirements.txt` but not materially used in current Python modules.
+- `python-dotenv` - environment bootstrapping in `utils.py`
+- `pyotp` - optional Amazon TOTP automation for MFA
+- `requests`, `beautifulsoup4`, `httpx` - available but mostly secondary in current runtime paths
 
 ## Configuration
 
 **Environment:**
-- Secrets and runtime knobs come from `.env` via `get_env()` in `utils.py`.
-- Key vars referenced in code: `ANTHROPIC_API_KEY`, `AMAZON_EMAIL`, `AMAZON_PASSWORD`, `EB_USERNAME`, `EB_PASSWORD`, `SERVER_PORT`, `MAX_RETRIES`, `BROWSER_HEADLESS`.
-- Browser watchdog defaults are set in code with `TIMEOUT_BrowserStartEvent`, `TIMEOUT_BrowserLaunchEvent`, `TIMEOUT_BrowserConnectedEvent`.
+- `.env` loaded globally from `utils.py` (`load_dotenv(override=True)`)
+- Critical variables include `ANTHROPIC_API_KEY`, Amazon credentials (`AMAZON_*` + business variants), and EB login email (`EB_LOGIN_EMAIL`)
+- Runtime toggles include `SERVER_PORT`, `BROWSER_HEADLESS`, `MAX_RETRIES`
 
-**Build:**
-- No build system (interpreted Python scripts).
-- Runtime scripts are executed directly (`python main.py`, `python manual_login.py`, `python test_scraper.py`).
+**Process/Runtime Config:**
+- `ecosystem.config.js` defines PM2 apps (`amazon-agent`, `n8n-server`) and timezone env (`TZ`, `GENERIC_TIMEZONE`, `N8N_DEFAULT_TIMEZONE`)
+- Browser profile state persisted in `data/browser-profile*`
 
 ## Platform Requirements
 
 **Development:**
-- macOS-oriented by default because `stealth_utils.py` searches Playwright Chromium in `~/Library/Caches/ms-playwright`.
-- Requires local GUI session (`headless=False`) for normal operation and manual login fallback.
+- macOS-oriented defaults (Playwright cache path in `stealth_utils.py` uses `~/Library/Caches/ms-playwright`)
+- Python 3.11+ required; scripts prefer 3.14 when available
+- Playwright Chromium installed locally
 
-**Production:**
-- Intended as a long-running local service on port `8080` (or `SERVER_PORT`).
-- Depends on persistent local browser state at `data/browser-profile`.
-
-## GSD Context Additions
-
-**Planned Stack (from existing project docs):**
-- n8n is the intended orchestration runtime for Gmail trigger + branching + downstream integrations (`.planning/PROJECT.md`, `CLAUDE.md`).
-- pm2 is the intended local process supervisor for always-on operation (`IMPLEMENTATION_PLAN.md`).
-- Google Sheets + Telegram are documented as downstream outputs, but no runtime calls exist yet in current Python modules.
-
-**Current vs Planned Reality:**
-- Current implemented Python code covers webhook intake and browser automation adapters.
-- Planned infrastructure in docs includes additional integration/runtime pieces that are partially implemented outside this repository state.
+**Production/Operations:**
+- Local host services managed with PM2, not containerized
+- API expected at `http://localhost:8080`, n8n at `http://localhost:5678`
+- State depends on persisted local profile directories and `.env` secrets
 
 ---
 
-*Stack analysis: 2026-02-13*
+*Stack analysis: 2026-02-17*
 *Update after major dependency or runtime changes*

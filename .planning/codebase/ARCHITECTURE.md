@@ -1,133 +1,120 @@
 # Architecture
 
-**Analysis Date:** 2026-02-13
+**Analysis Date:** 2026-02-17
 
 ## Pattern Overview
 
-**Overall:** Local webhook-driven automation service with LLM-guided browser workers.
+**Overall:** Single-process API orchestrator with deterministic browser automation and constrained LLM-assisted browser tasks.
 
 **Key Characteristics:**
-- Single-process Python service exposes FastAPI endpoints.
-- Request routing branches by email type (`order_confirmation` vs `shipping_confirmation`).
-- Browser tasks are delegated to specialized agent wrappers (`AmazonScraper`, `ElectronicsBuyerAgent`).
-- Strong schema boundary at IO points through Pydantic models.
+- FastAPI ingress layer for n8n-triggered event handling
+- Per-request orchestration in `BrowserAgent` that branches by email type
+- Strongly typed Pydantic contracts at boundaries (`models.py`, `eb_contracts.py`)
+- Hybrid execution: deterministic Playwright for auth/critical steps + browser-use for selected deal/tracking automation
 
 ## Layers
 
 **API Layer:**
-- Purpose: expose health and processing endpoints.
-- Contains: FastAPI app and route handlers in `main.py`.
-- Depends on: `BrowserAgent`, model contracts, logger utilities.
-- Used by: n8n HTTP nodes and local manual tests.
+- Purpose: Expose HTTP endpoints and validate request payloads
+- Contains: `main.py` FastAPI app (`/`, `/health`, `/process-order`, `/test`)
+- Depends on: `BrowserAgent`, `models.py`, logging utilities
+- Used by: n8n/local callers
 
 **Orchestration Layer:**
-- Purpose: process-level workflow coordination and branching.
-- Contains: `BrowserAgent` in `browser_agent.py`.
-- Depends on: scraper adapters and Pydantic models.
-- Used by: API layer (`main.py`).
+- Purpose: Route order/shipping flows and aggregate outcomes
+- Contains: `BrowserAgent.process_email()` and routing helpers in `browser_agent.py`
+- Depends on: Amazon scraper and ElectronicsBuyer agent
+- Used by: API layer
 
-**Automation Adapters:**
-- Purpose: execute website-specific steps and return typed results.
-- Contains: `AmazonScraper` (`amazon_scraper.py`) and `ElectronicsBuyerAgent` (`electronics_buyer.py`).
-- Depends on: `browser_use.Agent`, `ChatAnthropic`, browser profile helpers.
-- Used by: orchestration layer.
+**Automation Layer:**
+- Purpose: Perform Amazon + EB browser tasks
+- Contains: `amazon_scraper.py`, `electronics_buyer.py`, `electronics_buyer_llm.py`
+- Depends on: Playwright, browser-use, Anthropic, stealth profile helpers
+- Used by: Orchestration layer
 
-**Shared Foundations:**
-- Purpose: contracts, logging, environment access, browser profile policy.
-- Contains: `models.py`, `utils.py`, `stealth_utils.py`.
-- Used by: all layers.
+**Contract/Model Layer:**
+- Purpose: Enforce schema and semantic correctness of automation outcomes
+- Contains: `models.py`, `eb_contracts.py`
+- Depends on: Pydantic
+- Used by: all runtime layers
+
+**Operational Utility Layer:**
+- Purpose: logging/env/bootstrap/runtime compatibility checks and process management
+- Contains: `utils.py`, `runtime_checks.py`, `stealth_utils.py`, PM2 scripts/config
+- Used by: automation and API layers
 
 ## Data Flow
 
 **Order Confirmation Flow:**
-1. n8n sends payload to `POST /process-order` (`main.py`).
-2. FastAPI validates payload into `EmailData` (`models.py`).
-3. `BrowserAgent.process_email()` routes to `_process_order_confirmation()` (`browser_agent.py`).
-4. `AmazonScraper.scrape_order_confirmation()` extracts typed `OrderDetails` (`amazon_scraper.py`).
-5. `ElectronicsBuyerAgent.submit_deal()` submits and returns `EBDealResult` (`electronics_buyer.py`).
-6. `AgentResponse` is returned to caller.
+1. n8n sends `POST /process-order` payload (`email_type=order_confirmation`)
+2. FastAPI validates payload into `EmailData`
+3. `BrowserAgent` chooses personal/business `AmazonScraper` via `account_type`
+4. Amazon deterministic fallback scraper extracts order details
+5. EB deal submission is intentionally skipped for this flow
+6. `AgentResponse` returned with Amazon payload and execution metadata
 
 **Shipping Confirmation Flow:**
-1. Same entry as above.
-2. `BrowserAgent` routes to `_process_shipping_confirmation()`.
-3. `AmazonScraper.scrape_shipping_confirmation()` extracts `ShippingDetails`.
-4. `ElectronicsBuyerAgent.submit_tracking()` returns `EBTrackingResult`.
-5. Unified `AgentResponse` returns success/failure metadata.
+1. n8n sends `POST /process-order` payload (`email_type=shipping_confirmation`)
+2. `BrowserAgent` selects correct Amazon profile and scrapes tracking details
+3. `ElectronicsBuyerAgent.submit_tracking()` runs deterministic auth + bounded retries
+4. EB result warnings/errors merged into `AgentResponse`
+5. Final response returned to caller
 
 **State Management:**
-- Mostly stateless per request.
-- Persistent browser authentication state in `data/browser-profile`.
-- Optional local key-value state available in `data/state.json` via `utils.py`.
+- Request-level state in memory only
+- Persistent auth/session state in local Chromium profile directories under `data/`
+- Logs and optional utility state persisted to filesystem
 
 ## Key Abstractions
 
-**Typed Contracts (Pydantic Models):**
-- Purpose: define stable payload/result schemas.
-- Examples: `EmailData`, `OrderDetails`, `ShippingDetails`, `AgentResponse` in `models.py`.
-- Pattern: schema-first boundary validation.
+**Scraper/Agent Classes:**
+- `AmazonScraper` - deterministic Amazon extraction with strict item-scope controls
+- `ElectronicsBuyerAgent` - deterministic auth + submission guardrails
+- `ElectronicsBuyerLLMExecutor` - constrained browser-use tasks with contract enforcement
 
-**Site Agent Wrappers:**
-- Purpose: isolate prompt/tool configuration per target site.
-- Examples: `AmazonScraper`, `ElectronicsBuyerAgent`.
-- Pattern: adapter around `browser_use.Agent` with structured output enforcement.
-
-**LLM Compatibility Wrapper:**
-- Purpose: normalize provider/model access expected by browser-use.
-- Examples: `AnthropicWrapper` in both scraper modules.
-- Pattern: thin proxy via `__getattr__`.
+**Result Contracts:**
+- `OrderDetails`, `ShippingDetails`, `EBDealResult`, `EBTrackingResult`, `AgentResponse`
+- `enforce_deal_contract()` applies success semantics and warning flags
 
 ## Entry Points
 
-**API Service:**
-- Location: `main.py`.
-- Triggers: HTTP requests from n8n/manual callers.
-- Responsibilities: validation, invocation, response shaping, error translation.
+**HTTP Service:**
+- Location: `main.py`
+- Trigger: FastAPI/uvicorn startup
+- Responsibilities: endpoint registration, request handling, error wrapping
 
-**Manual Session Bootstrap:**
-- Location: `manual_login.py`.
-- Triggers: manual CLI run.
-- Responsibilities: open persistent Chromium context and let user log in interactively.
+**Manual/Diagnostic Entrypoints:**
+- `test_scraper.py`, `test_debug.py`, `test_diagnose.py` for interactive automation diagnostics
+- `manual_login.py` for profile priming by account mode
 
-**Diagnostic Runners:**
-- Location: `test_scraper.py`, `test_debug.py`, `test_diagnose.py`.
-- Triggers: manual CLI run.
-- Responsibilities: isolated troubleshooting of browser agent behavior.
+**Operations Entrypoints:**
+- `scripts/services-up.sh`, `scripts/services-down.sh`, `scripts/services-status.sh`, `scripts/services-logs.sh`
+- PM2 app bootstrap via `ecosystem.config.js`
 
 ## Error Handling
 
-**Strategy:**
-- Exception capture near API boundary and orchestration boundary.
-- Agent-level structured-output guard rails (`structured_output is None` -> `RuntimeError`).
+**Strategy:** Catch-and-wrap at orchestration/API boundaries, plus explicit semantic flags for EB outcomes.
 
 **Patterns:**
-- Broad `except Exception` in `main.py` and `browser_agent.py`.
-- Fail-safe response object on orchestration failures (`success=False`, populated `errors`).
-- Resource cleanup via `finally: await agent.close()` in scraper modules.
+- Broad `try/except` in `BrowserAgent.process_email()` returning structured failure responses
+- EB flag-based error categorization (`FLAG_*`) in `electronics_buyer.py` and `eb_contracts.py`
+- Fallback recovery for malformed LLM JSON output in `amazon_scraper.py` and `electronics_buyer_llm.py`
 
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Shared logger from `utils.py`; route, orchestration, and scraper steps emit info/error logs.
+- Central logger from `utils.py`, writes to file + stdout
+- Step-level logs in scraper/agent flows for auditability
 
 **Validation:**
-- FastAPI/Pydantic validate inbound request and structured outputs.
+- Pydantic validation on request/response payloads
+- Additional semantic contract enforcement for deal outcomes
 
 **Authentication:**
-- `.env` for API keys/credentials; persistent browser profile for session continuity.
-
-**Operational Debugging:**
-- Browser-use GIF + conversation trace files written to `logs/`.
-
-## GSD Context Additions
-
-**Roadmap Alignment:**
-- Architecture is documented in `.planning/ROADMAP.md` as a 5-phase progression where current code corresponds mainly to Phase 1 foundations.
-- `.planning/STATE.md` tracks this as a blocked/fix-focused phase around browser automation reliability.
-
-**System Boundary Context:**
-- Full end-to-end design in `CLAUDE.md` includes n8n orchestration plus Sheets/Telegram side effects, while this codebase currently represents the Python automation boundary within that larger system.
+- In-browser auth flows with optional TOTP and OTP prompt gating
+- Persistent browser profiles for session continuity
 
 ---
 
-*Architecture analysis: 2026-02-13*
-*Update when orchestration pattern, entry points, or layer boundaries change*
+*Architecture analysis: 2026-02-17*
+*Update when major patterns change*

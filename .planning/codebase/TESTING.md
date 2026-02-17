@@ -1,78 +1,104 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-13
+**Analysis Date:** 2026-02-17
 
 ## Test Framework
 
-**Current State:**
-- No formal unit/integration test framework (no `pytest`, `unittest` suites, or `tests/` package).
-- Validation currently relies on executable diagnostic scripts against live systems.
+**Runner:**
+- Script-style Python tests executed directly (`python test_*.py`)
+- No pytest/unittest discovery configuration present
 
-**Active Test Scripts:**
-- `test_scraper.py` - primary smoke test for order and shipping extraction with structured output.
-- `test_debug.py` - DEBUG-level browser-use trace helper for diagnosing agent failures.
-- `test_diagnose.py` - visual page-state diagnosis without structured schema constraints.
+**Assertion style:**
+- Custom `_assert()` helpers raising `AssertionError`
+- Contract semantics validated through source scanning, AST extraction, and behavior-level checks
+
+**Run Commands:**
+```bash
+venv314/bin/python test_eb_deal_contract.py
+venv314/bin/python test_eb_tracking_contract.py
+venv314/bin/python test_amazon_tracking_number_extraction.py
+venv314/bin/python test_scraper.py shipping 123-4567890-1234567 amz_business
+```
 
 ## Test File Organization
 
-- Test scripts are top-level files adjacent to production modules.
-- Naming follows `test_*.py`, but they are CLI tools rather than automated suite files.
-- No shared testing utilities directory.
+**Location:**
+- Root-level `test_*.py` files
+- No separate `tests/` package directory currently
+
+**Naming:**
+- Contract tests: `test_<domain>_contract.py`
+- Behavior/regression tests: `test_<domain>_<behavior>.py`
+- Diagnostics/manual helpers: `test_debug.py`, `test_diagnose.py`, `test_scraper.py`
+
+**Structure:**
+- Most test files expose `main() -> int` and execute via `if __name__ == "__main__"`
+- Individual checks grouped as sequential `_assert(...)` calls
 
 ## Test Structure
 
-- Async `main()` pattern with direct invocation via `asyncio.run(...)`.
-- Runtime configuration loaded via `.env` in each script.
-- Scripts print operator-facing status and artifact locations to terminal.
-- Pass/fail semantics are manual (human reads output and debug artifacts).
+**Suite organization pattern:**
+- Static source contract checks (presence/absence of key strings or functions)
+- AST-based extraction of targeted methods for fast deterministic validation
+- Limited runtime/manual flows for browser behavior observation
+
+**Setup/teardown:**
+- Minimal fixture lifecycle; tests are intentionally lightweight
+- Environment load via `dotenv` in diagnostic scripts when browser/LLM interaction is needed
 
 ## Mocking
 
-- No mocking framework usage detected.
-- Tests hit real external dependencies: Anthropic API, Amazon pages, and local Chromium profile.
-- Failure modes include network/session instability and live-site UI changes.
+**Framework:**
+- No dedicated mocking framework in current tests
+
+**Patterns:**
+- Instead of mocks, tests inspect source and method outputs with synthesized inputs
+- AST extraction isolates single method logic without importing full runtime dependencies
+
+**What is mocked/stubbed:**
+- Effectively none through mocking libraries
+- Runtime-heavy browser calls avoided in most contract tests
 
 ## Fixtures and Factories
 
-- No reusable fixture/factory layer.
-- Test input is provided interactively or via CLI args (order number + mode).
-- Persistent session state in `data/browser-profile` effectively acts as an implicit runtime fixture.
+**Test data approach:**
+- Inline dictionaries/strings for expected behavior checks
+- No dedicated fixtures directory or factory module
 
 ## Coverage
 
-- No code coverage tooling or reports.
-- Coverage is unknown and likely low for utility/error branches.
-- Current scripts primarily validate happy-path runtime behavior.
+**Requirements:**
+- No formal percentage target configured
+- Coverage strategy is targeted regression protection for fragile automation semantics
+
+**Tooling:**
+- No coverage config/tool (`coverage.py`, `pytest-cov`) detected
 
 ## Test Types
 
-**Smoke / End-to-End-ish:**
-- `test_scraper.py` verifies agent can navigate, extract, and return typed output.
+**Contract tests (dominant):**
+- Verify required flags, guardrails, selectors, and routing contracts remain present
+- Example files: `test_eb_deal_contract.py`, `test_amazon_item_scope_contract.py`
 
-**Diagnostics:**
-- `test_debug.py` and `test_diagnose.py` are troubleshooting utilities, not regression guards.
+**Unit-like method tests:**
+- AST extraction + direct function invocation for parsing/normalization methods
+- Example files: `test_amazon_shipping_date_normalization.py`, `test_amazon_tracking_number_extraction.py`
 
-**Missing Types:**
-- Unit tests for transformation/validation logic.
-- Contract tests for webhook payload handling.
-- Integration tests with controlled stubs for external services.
+**Manual/integration diagnostics:**
+- Browser+LLM exploratory scripts for debugging live automation failures
+- Example files: `test_scraper.py`, `test_debug.py`, `test_diagnose.py`
 
 ## Common Patterns
 
-- Manual execution from virtualenv (e.g., `venv/bin/python3 test_scraper.py shipping <order>`).
-- Debugging through generated artifacts in `logs/` (GIF + conversation JSON).
-- Operator-in-the-loop intervention for auth/2FA via `manual_login.py`.
+**Fast-fail checks:**
+- `PASS:` print statements on success, immediate assertion failures otherwise
+- Source-string checks used to lock in operational guardrails
 
-## GSD Context Additions
-
-**Planned Verification Flow (from workflows):**
-- `get-shit-done/workflows/verify-work.md` and phase verification workflows indicate a UAT-oriented acceptance layer on top of code execution.
-- `.planning/phases/*/*-SUMMARY.md` acts as a historical verification artifact after each plan.
-
-**Current Gap vs Planned Process:**
-- Workflow-level verification docs exist, but automated Python test harnessing (unit/integration suite) is not yet established.
+**Risk tradeoff:**
+- Strong at preventing known regressions in fragile paths
+- Weaker on full end-to-end automated integration due to external site dependencies
 
 ---
 
-*Testing analysis: 2026-02-13*
-*Update when formal automated test framework is introduced*
+*Testing analysis: 2026-02-17*
+*Update when test tooling or structure changes*

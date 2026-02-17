@@ -1,87 +1,101 @@
 # External Integrations
 
-**Analysis Date:** 2026-02-13
+**Analysis Date:** 2026-02-17
 
 ## APIs & External Services
 
-**Inbound Trigger:**
-- n8n calls `POST /process-order` in `main.py` with normalized email payloads (`EmailData`).
+**Amazon (website automation):**
+- Service: Amazon consumer + Amazon Business web flows
+  - Integration method: Browser automation via Playwright persistent contexts (`amazon_scraper.py`)
+  - Auth: `AMAZON_EMAIL` / `AMAZON_PASSWORD` and `AMAZON_BUSINESS_EMAIL` / `AMAZON_BUSINESS_PASSWORD`
+  - Optional MFA: `AMAZON_TOTP_SECRET` and `AMAZON_BUSINESS_TOTP_SECRET`
+  - Key URLs: order details, print summary, tracking pages
 
-**LLM Provider:**
-- Anthropic Claude via `langchain_anthropic.ChatAnthropic` in `amazon_scraper.py` and `electronics_buyer.py`.
-- Model currently pinned to `claude-sonnet-4-5-20250929`.
+**ElectronicsBuyer.gg:**
+- Service: deal submission + tracking submission workflow
+  - Integration method: deterministic Playwright auth flow in `electronics_buyer.py` plus browser-use LLM execution in `electronics_buyer_llm.py`
+  - Auth: email-login + OTP gate in web app (`/app/login`) with interactive code entry path
+  - Endpoints used: `/app/deals`, `/app/tracking-submissions`
 
-**Browser Targets:**
-- Amazon order/invoice pages (`https://www.amazon.com/...`) for extraction (`amazon_scraper.py`).
-- ElectronicsBuyer pages (`https://electronicsbuyer.gg/app/deals`, `https://electronicsbuyer.gg/app/tracking-submissions`) for submission (`electronics_buyer.py`).
+**Anthropic API:**
+- Service: Claude model used by browser-use agents
+  - SDK/Client: `browser_use.llm.ChatAnthropic`
+  - Auth: `ANTHROPIC_API_KEY`
+  - Usage: constrained task prompts for EB deal/tracking execution and historical scraper recovery paths
+
+**n8n local workflow engine:**
+- Service: upstream orchestration and webhook sender
+  - Integration method: HTTP POST to FastAPI `/process-order`
+  - Runtime target: local `n8n` process managed via PM2 (`http://localhost:5678`)
 
 ## Data Storage
 
-**Local Persistent Storage:**
-- Browser session profile in `data/browser-profile/` (Playwright persistent context).
-- Optional cookie/state helpers in `utils.py` writing under `data/`.
+**Databases:**
+- None in repository (no SQL/NoSQL client usage in runtime flow)
 
-**Logs and Artifacts:**
-- Text logs via Python logging to `logs/agent.log` and stdout (`utils.py`).
-- Visual/debug artifacts: `logs/agent.gif`, `logs/eb_agent.gif`, `logs/diagnose.gif`.
-- Conversation traces: `logs/agent_conversation.json`, `logs/eb_agent_conversation.json`.
+**File Storage (local filesystem):**
+- Browser sessions: `data/browser-profile/`, `data/browser-profile-personal/`, `data/browser-profile-business/`
+- Logs: `logs/` plus PM2 logs (`logs/pm2-*.log`)
+- Optional state blobs: `data/state.json`, `data/cookies.json` (utility helpers)
+
+**Caching:**
+- No dedicated cache service (Redis/Memcached not present)
+- Browser profile snapshot caching in temp directories via `stealth_utils.py`
 
 ## Authentication & Identity
 
-**Credential Sources:**
-- `.env` keys: `ANTHROPIC_API_KEY`, `AMAZON_EMAIL`, `AMAZON_PASSWORD`, `EB_USERNAME`, `EB_PASSWORD`.
+**Auth Provider:**
+- Amazon account auth handled in-browser by deterministic selectors and optional TOTP
+- ElectronicsBuyer auth handled in-browser; OTP may require terminal interaction
 
-**Session Strategy:**
-- Primary auth method is persistent browser profile (`data/browser-profile`) created/maintained with `manual_login.py`.
-- Amazon login steps are also embedded in the LLM task prompt as fallback (`amazon_scraper.py`).
+**OAuth Integrations:**
+- None implemented in codebase
 
 ## Monitoring & Observability
 
-**Current Signals:**
-- Structured app logs through `logger` from `utils.py`.
-- Endpoint-level logs in `main.py` and orchestration-level logs in `browser_agent.py`.
-- Debug replay assets from browser-use agents (GIF + conversation JSON).
+**Error Tracking:**
+- No third-party APM/exception tracker configured (Sentry/Datadog absent)
 
-**Gaps:**
-- No centralized metrics, tracing, alerting, or health history.
+**Logs:**
+- Python logging via `logging` module to `logs/agent.log` and stdout (`utils.py`)
+- PM2 process logs configured in `ecosystem.config.js`
 
 ## CI/CD & Deployment
 
-- No CI pipeline definitions detected.
-- No container/deployment manifests detected.
-- Expected execution is local/manual service lifecycle.
+**Hosting:**
+- Local/self-hosted service model with PM2
+- No cloud deployment manifests in repo
+
+**CI Pipeline:**
+- No GitHub Actions or CI config files detected
+- Tests appear to be run manually via direct Python execution
 
 ## Environment Configuration
 
-**Configuration Model:**
-- `.env` + runtime defaults in code.
-- `get_env()` enforces required values when no default is provided (`utils.py`).
+**Development:**
+- Secrets in `.env` (gitignored expected)
+- Requires valid Anthropic key and account credentials for Amazon + EB flows
+- Uses persistent local Chromium profiles to reduce repeated login friction
 
-**Notable Runtime Params:**
-- Server binding from `SERVER_PORT` (`main.py`).
-- Timeout behavior partly configured through environment defaults in scraper modules.
+**Staging:**
+- No separate staging environment configuration found
+
+**Production:**
+- Operations documented in `docs/OPERATIONS.md`
+- Resilience primarily via PM2 autorestart and persistent browser profiles
 
 ## Webhooks & Callbacks
 
-**Inbound Webhook:**
-- `POST /process-order` in `main.py` receives order/shipping events and returns `AgentResponse`.
+**Incoming:**
+- `POST /process-order` in `main.py`
+  - Source: n8n
+  - Payload model: `EmailData` from `models.py`
 
-**Outbound Callback Pattern:**
-- No direct webhook callbacks from this service.
-- Response body is synchronous and expected to be consumed by n8n HTTP Request node.
-
-## GSD Context Additions
-
-**Documented Integration Targets (existing planning context):**
-- Gmail trigger and Claude-based email qualification/categorization are specified in `CLAUDE.md` and `IMPLEMENTATION_PLAN.md`.
-- Google Sheets row append/update behavior is specified in `.planning/PROJECT.md` and `CLAUDE.md`.
-- Telegram success/error notifications are specified in `.planning/PROJECT.md` and `CLAUDE.md`.
-
-**Implementation Status Snapshot:**
-- Inbound webhook integration from n8n to FastAPI is present.
-- Google Sheets and Telegram outbound integrations are planned but not present in current Python code paths.
+**Outgoing:**
+- Browser-driven interactions to Amazon and ElectronicsBuyer web UIs
+- No server-to-server webhook posts implemented by this app layer
 
 ---
 
-*Integrations analysis: 2026-02-13*
-*Update when external services, auth flow, or webhook contracts change*
+*Integration audit: 2026-02-17*
+*Update when adding/removing external services*
