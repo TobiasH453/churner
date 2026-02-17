@@ -11,29 +11,35 @@ INSTALL_FAILED=0
 
 install_init_logging() {
   mkdir -p "${INSTALL_LOG_DIR}"
-  exec > >(tee -a "${INSTALL_LOG_FILE}") 2>&1
+  : >"${INSTALL_LOG_FILE}"
+}
+
+install_emit() {
+  local message="$1"
+  printf '%s\n' "${message}"
+  printf '%s\n' "${message}" >>"${INSTALL_LOG_FILE}"
 }
 
 install_print_header() {
   local title="$1"
-  echo
-  printf '========== %s ==========%s' "${title}" "\n"
+  install_emit ""
+  install_emit "========== ${title} =========="
 }
 
 install_info() {
-  printf '[INFO] %s\n' "$1"
+  install_emit "[INFO] $1"
 }
 
 install_ok() {
-  printf '[PASS] %s\n' "$1"
+  install_emit "[PASS] $1"
 }
 
 install_warn() {
-  printf '[WARN] %s\n' "$1"
+  install_emit "[WARN] $1"
 }
 
 install_error() {
-  printf '[FAIL] %s\n' "$1"
+  install_emit "[FAIL] $1"
   INSTALL_FAILED=1
 }
 
@@ -42,11 +48,11 @@ install_manual_step() {
   local working_dir="$2"
   local reason="$3"
 
-  echo
+  install_emit ""
   install_warn "Manual step required"
-  echo "  Command: ${command}"
-  echo "  Directory: ${working_dir}"
-  echo "  Reason: ${reason}"
+  install_emit "  Command: ${command}"
+  install_emit "  Directory: ${working_dir}"
+  install_emit "  Reason: ${reason}"
 
   if [[ -t 0 ]]; then
     printf 'Press Enter after completing this step to continue... '
@@ -60,7 +66,9 @@ install_manual_step() {
 install_summary_line() {
   local label="$1"
   local status="$2"
-  printf '  - %-24s %s\n' "${label}" "${status}"
+  local line
+  line="$(printf '  - %-24s %s' "${label}" "${status}")"
+  install_emit "${line}"
 }
 
 install_usage() {
