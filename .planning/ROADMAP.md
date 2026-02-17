@@ -1,8 +1,8 @@
-# Roadmap: Amazon Email Automation
+# Roadmap: 1step_cashouts
 
 ## Overview
 
-This roadmap transforms a broken browser automation system into a reliable end-to-end workflow. Phase 1 fixes the immediate blocker (browser crashes on launch), Phase 2 implements data extraction from Amazon, Phase 3 hardens reliability to 95%+ success rate, Phase 4 integrates ElectronicsBuyer submission, and Phase 5 completes the workflow with Google Sheets updates and Telegram notifications. The existing n8n orchestration layer and FastAPI webhook server are already operational - this roadmap focuses exclusively on making browser automation extract real data instead of placeholders.
+This roadmap turns an already-working local automation system into a shippable macOS product for semi-technical users. The phases are ordered to reduce launch risk: first make installation and security deterministic, then lock workflow integration, then add executable verification, support tooling, and finally release packaging.
 
 ## Phases
 
@@ -10,95 +10,112 @@ This roadmap transforms a broken browser automation system into a reliable end-t
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [ ] **Phase 1: Browser Automation Fix** - Fix structured output validation causing immediate crashes
-- [ ] **Phase 2: Amazon Data Extraction** - Extract real order/shipping data from Amazon pages
-- [ ] **Phase 3: Reliability Hardening** - Achieve 95%+ success rate with retries and timeouts
-- [ ] **Phase 4: ElectronicsBuyer Integration** - Submit deals/tracking to EB.gg and extract payout values
-- [ ] **Phase 5: End-to-End Integration** - Complete workflow with Sheets updates and notifications
+- [ ] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
+- [ ] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
+- [ ] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
+- [ ] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
+- [ ] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
+- [ ] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
 
 ## Phase Details
 
-### Phase 1: Browser Automation Fix
-**Goal**: Browser agent completes Amazon navigation tasks without crashing
+### Phase 1: Installer & Secure Bootstrap
+**Goal**: A fresh Mac user can run one installer path that sets up prerequisites and secure local configuration.
 **Depends on**: Nothing (first phase)
-**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04
+**Requirements**: INST-01, INST-02, SECR-01, SECR-02, SECR-03
 **Success Criteria** (what must be TRUE):
-  1. Browser agent launches and navigates to Amazon order pages without crashing
-  2. Agent returns structured data matching Pydantic models (no validation errors)
-  3. Agent completes task without placeholder "NEEDS_PARSING" returns
-  4. Debug artifacts (GIF recording, conversation logs) show successful navigation
+1. User can execute `install.sh` and receive explicit preflight pass/fail results for required dependencies.
+2. Installer creates local config from template without printing secret values.
+3. A clean-machine setup run completes in 20 minutes or less on documented baseline hardware/network conditions.
+4. Distributed artifact excludes browser profile directories and secret-bearing files by default.
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01: Build prerequisite detection and install flow skeleton
+- [ ] 01-02: Implement secure env template/bootstrap validation
+- [ ] 01-03: Add package exclusion rules for sensitive state
+- [ ] 01-04: Validate clean-machine timing and installer reliability
+
+### Phase 2: Runtime Service Operations
+**Goal**: Users can consistently run and observe required services with a stable command surface.
+**Depends on**: Phase 1
+**Requirements**: INST-03
+**Success Criteria** (what must be TRUE):
+1. User can bring up required services with one documented command path.
+2. User can get clear status output for API and n8n runtime health.
+3. User can access consolidated logs through documented helper commands.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Fix output_model_schema, task prompts, and error handling in amazon_scraper.py and electronics_buyer.py
-- [ ] 01-02-PLAN.md — Create test_scraper.py and verify end-to-end browser navigation with real order
+- [ ] 02-01: Harden service lifecycle scripts and command UX
+- [ ] 02-02: Validate operational script behavior from fresh install state
 
-### Phase 2: Amazon Data Extraction
-**Goal**: Extract real order/shipping data from Amazon pages
-**Depends on**: Phase 1
-**Requirements**: EXTRACT-01, EXTRACT-02, EXTRACT-03, EXTRACT-04
-**Success Criteria** (what must be TRUE):
-  1. Order confirmations return all required fields: items, quantities, prices, cashback %, arrival date
-  2. Shipping confirmations return all required fields: tracking number, carrier, delivery date
-  3. Extracted data passes semantic validation (prices > $0, valid date formats, tracking patterns match carriers)
-  4. Items are formatted in natural language ("3x iPad 128GB Blue, 1x Amazon Fire Stick HD")
-**Plans**: TBD
-
-Plans:
-- [ ] TBD during planning
-
-### Phase 3: Reliability Hardening
-**Goal**: System achieves 95%+ success rate on email processing
+### Phase 3: n8n Workflow Packaging & Contract Alignment
+**Goal**: Workflow import is reproducible and its payload contract is explicitly aligned to API expectations.
 **Depends on**: Phase 2
-**Requirements**: RELIABLE-01, RELIABLE-02, RELIABLE-03, RELIABLE-04
+**Requirements**: N8N-01, N8N-02, N8N-03
 **Success Criteria** (what must be TRUE):
-  1. Transient failures (timeouts, network issues) automatically retry with exponential backoff
-  2. Agent completes 95%+ of test orders within timeout limits
-  3. Failed attempts produce debug artifacts (GIFs, logs, screenshots) for troubleshooting
-  4. Expired Amazon sessions are detected and trigger re-login before agent runs
-**Plans**: TBD
+1. User can import a versioned workflow JSON from `n8n-workflows/` using published instructions.
+2. Imported workflow sends required fields for `/process-order` contract without manual patching.
+3. Setup guide links n8n import/config to service runtime setup in one coherent path.
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD during planning
+- [ ] 03-01: Export/version workflow artifact(s) for distribution
+- [ ] 03-02: Add payload contract checks and alignment notes
+- [ ] 03-03: Publish n8n integration guide tied to runtime setup
 
-### Phase 4: ElectronicsBuyer Integration
-**Goal**: Submit deals/tracking to EB.gg and extract payout values
-**Depends on**: Phase 2
-**Requirements**: EB-01, EB-02, EB-03
+### Phase 4: Smoke Verification Harness
+**Goal**: One command proves functional readiness beyond simple uptime checks.
+**Depends on**: Phase 3
+**Requirements**: VER-01, VER-02, VER-03
 **Success Criteria** (what must be TRUE):
-  1. Agent submits order deals to electronicsbuyer.gg and returns total payout value
-  2. Agent submits shipping tracking to electronicsbuyer.gg successfully
-  3. EB.gg transient errors (maintenance, timeouts) retry automatically without failing workflow
-**Plans**: TBD
+1. User can run one smoke-test command after install.
+2. Smoke test verifies API health endpoint behavior.
+3. Smoke test verifies order-confirmation contract path.
+4. Smoke test verifies shipping-confirmation contract path.
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD during planning
+- [ ] 04-01: Build smoke test runner and output format
+- [ ] 04-02: Add order path validation checks
+- [ ] 04-03: Add shipping path validation checks and failure guidance
 
-### Phase 5: End-to-End Integration
-**Goal**: Complete workflow from email to Sheet update with notifications
+### Phase 5: Troubleshooting & Diagnostics
+**Goal**: Support workflows are fast, safe, and reproducible for non-technical users.
 **Depends on**: Phase 4
-**Requirements**: SHEETS-01, SHEETS-02, NOTIFY-01, NOTIFY-02
+**Requirements**: SUP-01, SUP-02
 **Success Criteria** (what must be TRUE):
-  1. Order confirmation emails trigger new Google Sheets rows with all columns (A-G, J) populated
-  2. Shipping confirmation emails update existing Google Sheets rows (find by order number, update columns J and M)
-  3. Successful processing sends Telegram notification with key details (order number, items, payout value)
-  4. Failed processing sends Telegram error alert with failure reason for user intervention
-**Plans**: TBD
+1. User can follow troubleshooting docs to resolve common install/runtime issues.
+2. User can generate a diagnostics bundle/script output without exposing raw secrets.
+3. Support instructions reference exact commands and expected outputs.
+**Plans**: 2 plans
 
 Plans:
-- [ ] TBD during planning
+- [ ] 05-01: Author troubleshooting doc from observed failure modes
+- [ ] 05-02: Implement diagnostics collector with redaction rules
+
+### Phase 6: Distribution & Release Readiness
+**Goal**: Package and docs are release-ready for macOS-first user distribution.
+**Depends on**: Phase 5
+**Requirements**: DIST-01, DIST-02
+**Success Criteria** (what must be TRUE):
+1. User can download a package containing required project artifacts, excluding sensitive local state.
+2. Package documentation clearly states prerequisites, included files, and first-run sequence.
+3. Release checklist confirms install -> run -> verify -> troubleshoot flow end-to-end.
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01: Define bundle structure and packaging steps
+- [ ] 06-02: Finalize release checklist and docs QA
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
-
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Browser Automation Fix | 0/2 | Not started | - |
-| 2. Amazon Data Extraction | 0/TBD | Not started | - |
-| 3. Reliability Hardening | 0/TBD | Not started | - |
-| 4. ElectronicsBuyer Integration | 0/TBD | Not started | - |
-| 5. End-to-End Integration | 0/TBD | Not started | - |
+| 1. Installer & Secure Bootstrap | 0/4 | Not started | - |
+| 2. Runtime Service Operations | 0/2 | Not started | - |
+| 3. n8n Workflow Packaging & Contract Alignment | 0/3 | Not started | - |
+| 4. Smoke Verification Harness | 0/3 | Not started | - |
+| 5. Troubleshooting & Diagnostics | 0/2 | Not started | - |
+| 6. Distribution & Release Readiness | 0/2 | Not started | - |
