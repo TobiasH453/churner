@@ -14,7 +14,7 @@ append_error() {
 trim_value() {
   local raw="$1"
   # shellcheck disable=SC2001
-  raw="$(echo "${raw}" | sed -E 's/^\s+//; s/\s+$//')"
+  raw="$(echo "${raw}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   if [[ ${#raw} -ge 2 ]]; then
     if [[ "${raw:0:1}" == '"' && "${raw: -1}" == '"' ]]; then
       raw="${raw:1:${#raw}-2}"
