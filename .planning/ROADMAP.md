@@ -12,7 +12,7 @@ This roadmap turns an already-working local automation system into a shippable m
 
 - [x] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
 - [x] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
-- [ ] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
+- [x] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
 - [ ] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
 - [ ] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
 - [ ] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
@@ -61,9 +61,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: Export/version workflow artifact(s) for distribution
-- [ ] 03-02: Add payload contract checks and alignment notes
-- [ ] 03-03: Publish n8n integration guide tied to runtime setup
+- [x] 03-01: Export/version workflow artifact(s) for distribution
+- [x] 03-02: Add payload contract checks and alignment notes
+- [x] 03-03: Publish n8n integration guide tied to runtime setup
 
 ### Phase 4: Smoke Verification Harness
 **Goal**: One command proves functional readiness beyond simple uptime checks.
@@ -115,7 +115,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Installer & Secure Bootstrap | 4/4 | Complete | 2026-02-17 |
 | 2. Runtime Service Operations | 2/2 | Complete | 2026-02-18 |
-| 3. n8n Workflow Packaging & Contract Alignment | 0/3 | Not started | - |
+| 3. n8n Workflow Packaging & Contract Alignment | 3/3 | Complete | 2026-02-18 |
 | 4. Smoke Verification Harness | 0/3 | Not started | - |
 | 5. Troubleshooting & Diagnostics | 0/2 | Not started | - |
 | 6. Distribution & Release Readiness | 0/2 | Not started | - |
