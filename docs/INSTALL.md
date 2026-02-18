@@ -109,3 +109,20 @@ Expected runtime validation result:
 If runtime validation fails:
 - Follow the printed `Next:` remediation command
 - Refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow
+
+## 7) n8n integration handoff
+
+After runtime validation passes, continue directly to n8n workflow setup:
+
+```bash
+bash scripts/verify-n8n-workflow-contract.sh
+```
+
+Then follow:
+
+- `docs/N8N_INTEGRATION.md` for import + credential rebind + webhook mode guidance
+- `docs/N8N_PAYLOAD_CONTRACT.md` for field-level payload contract rules
+
+Expected verification cue before/after import:
+
+- `[PASS] n8n workflow contract verification passed.`
