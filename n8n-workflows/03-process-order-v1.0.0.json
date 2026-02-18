@@ -74,6 +74,19 @@
     },
     {
       "parameters": {
+        "jsCode": "const incoming = $json.body ?? $json;\nconst source = incoming && typeof incoming === 'object' ? incoming : {};\nconst known = [\n  'email_type',\n  'order_number',\n  'account_type',\n  'grand_total',\n  'subject',\n  'body',\n  'recipient',\n  'sender',\n  'timestamp',\n  'contract_version',\n  'version'\n];\nconst unknown = Object.keys(source).filter((key) => !known.includes(key));\nconst warnings = Array.isArray($json.warnings) ? [...$json.warnings] : [];\nif (unknown.length) {\n  warnings.push(`unknown_fields_accepted:${unknown.join(',')}`);\n}\nconst rawVersion = source.contract_version ?? source.version ?? '1.0';\nconst contractVersion = String(rawVersion);\nif (contractVersion !== '1.0') {\n  warnings.push(`compatibility_mode_minor_variant:${contractVersion}`);\n}\nreturn [{\n  json: {\n    ...$json,\n    contract_version: contractVersion,\n    warnings\n  }\n}];"
+      },
+      "id": "Code_ContractWarnings",
+      "name": "Annotate Contract Warnings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        280
+      ]
+    },
+    {
+      "parameters": {
         "conditions": {
           "string": [
             {
@@ -92,7 +105,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -380,
+        -140,
         280
       ]
     },
@@ -102,21 +115,21 @@
         "url": "={{$env.SERVER_PORT ? 'http://localhost:' + $env.SERVER_PORT + '/process-order' : 'http://localhost:18080/process-order'}}",
         "jsonParameters": true,
         "options": {},
-        "bodyParametersJson": "={{ {\n  \"email_type\": $json.email_type,\n  \"order_number\": $json.order_number,\n  \"account_type\": $json.account_type,\n  \"grand_total\": $json.grand_total,\n  \"subject\": $json.subject,\n  \"body\": $json.body,\n  \"recipient\": $json.recipient,\n  \"sender\": $json.sender,\n  \"timestamp\": $json.timestamp\n} }}"
+        "bodyParametersJson": "={{ {\n  \"email_type\": $json.email_type,\n  \"order_number\": $json.order_number,\n  \"account_type\": $json.account_type,\n  \"grand_total\": $json.grand_total,\n  \"subject\": $json.subject,\n  \"body\": $json.body,\n  \"recipient\": $json.recipient,\n  \"sender\": $json.sender,\n  \"timestamp\": $json.timestamp,\n  \"contract_version\": $json.contract_version,\n  \"warnings\": $json.warnings\n} }}"
       },
       "id": "Http_ProcessOrder",
       "name": "POST /process-order",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        -120,
+        120,
         200
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ { \"success\": false, \"error\": \"missing_required_fields\", \"required\": [\"email_type\", \"order_number\"] } }}",
+        "responseBody": "={{ { \"success\": false, \"error\": \"missing_required_fields\", \"required\": [\"email_type\", \"order_number\"], \"warnings\": $json.warnings || [] } }}",
         "options": {
           "responseCode": 422
         }
@@ -126,7 +139,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -120,
+        120,
         360
       ]
     },
@@ -143,7 +156,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        120,
+        360,
         200
       ]
     }
@@ -161,6 +174,17 @@
       ]
     },
     "Canonical Payload": {
+      "main": [
+        [
+          {
+            "node": "Annotate Contract Warnings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Annotate Contract Warnings": {
       "main": [
         [
           {
