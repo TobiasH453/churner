@@ -92,3 +92,20 @@ If self-check fails, fix reported blockers and rerun:
 ```bash
 bash scripts/installer-self-check.sh
 ```
+
+## 6) Runtime validation handoff
+
+After self-check passes, run runtime validation in this order:
+
+```bash
+bash scripts/services-status.sh
+bash scripts/verify-runtime-operations.sh
+```
+
+Expected runtime validation result:
+- `[PASS] Runtime operations validation passed.`
+- Exit code `0`
+
+If runtime validation fails:
+- Follow the printed `Next:` remediation command
+- Refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow

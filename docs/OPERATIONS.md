@@ -11,6 +11,14 @@ bash scripts/services-logs.sh all 100
 bash scripts/services-down.sh
 ```
 
+Post-install validation handoff:
+
+```bash
+bash scripts/verify-runtime-operations.sh
+```
+
+See `docs/RUNTIME_VALIDATION.md` for pass/fail interpretation and first-response remediation.
+
 Service-specific logs:
 
 ```bash
