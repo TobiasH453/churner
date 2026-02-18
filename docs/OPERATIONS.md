@@ -19,6 +19,14 @@ bash scripts/verify-runtime-operations.sh
 
 See `docs/RUNTIME_VALIDATION.md` for pass/fail interpretation and first-response remediation.
 
+Phase 3 n8n integration handoff:
+
+```bash
+bash scripts/verify-n8n-workflow-contract.sh
+```
+
+See `docs/N8N_INTEGRATION.md` for import/configuration flow and `docs/N8N_PAYLOAD_CONTRACT.md` for field-level contract rules.
+
 Service-specific logs:
 
 ```bash
@@ -132,3 +140,11 @@ kill <pid>
 bash scripts/services-up.sh
 bash scripts/services-status.sh
 ```
+
+## n8n Contract Recovery
+
+If n8n import/webhook behavior is inconsistent with expected payload contract:
+1. Re-import canonical artifact `n8n-workflows/03-process-order-v1.0.0.json`.
+2. Rebind credentials and confirm local API target in workflow HTTP node.
+3. Run `bash scripts/verify-n8n-workflow-contract.sh`.
+4. Follow `docs/N8N_INTEGRATION.md` for test-vs-production webhook mode checks.
