@@ -1,0 +1,215 @@
+{
+  "name": "03 Process Order v1.0.0",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "03-process-order-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "Webhook_Incoming",
+      "name": "Webhook Incoming",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -860,
+        280
+      ],
+      "webhookId": "03-process-order-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "email_type",
+              "value": "={{$json.body?.email_type || $json.email_type || ''}}"
+            },
+            {
+              "name": "order_number",
+              "value": "={{$json.body?.order_number || $json.order_number || ''}}"
+            },
+            {
+              "name": "account_type",
+              "value": "={{$json.body?.account_type || $json.account_type || 'amz_personal'}}"
+            },
+            {
+              "name": "grand_total",
+              "value": "={{$json.body?.grand_total || $json.grand_total || ''}}"
+            },
+            {
+              "name": "subject",
+              "value": "={{$json.body?.subject || $json.subject || ''}}"
+            },
+            {
+              "name": "body",
+              "value": "={{$json.body?.body || $json.body_text || $json.body || ''}}"
+            },
+            {
+              "name": "recipient",
+              "value": "={{$json.body?.recipient || $json.recipient || ''}}"
+            },
+            {
+              "name": "sender",
+              "value": "={{$json.body?.sender || $json.sender || ''}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{$json.body?.timestamp || $json.timestamp || ''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "Set_CanonicalPayload",
+      "name": "Canonical Payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.email_type}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.order_number}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "If_RequiredFields",
+      "name": "Required Fields Present",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{$env.SERVER_PORT ? 'http://localhost:' + $env.SERVER_PORT + '/process-order' : 'http://localhost:18080/process-order'}}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{ {\n  \"email_type\": $json.email_type,\n  \"order_number\": $json.order_number,\n  \"account_type\": $json.account_type,\n  \"grand_total\": $json.grand_total,\n  \"subject\": $json.subject,\n  \"body\": $json.body,\n  \"recipient\": $json.recipient,\n  \"sender\": $json.sender,\n  \"timestamp\": $json.timestamp\n} }}"
+      },
+      "id": "Http_ProcessOrder",
+      "name": "POST /process-order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -120,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": \"missing_required_fields\", \"required\": [\"email_type\", \"order_number\"] } }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "Respond_MissingRequired",
+      "name": "Respond Missing Required",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "Respond_ApiResult",
+      "name": "Respond API Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        120,
+        200
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Incoming": {
+      "main": [
+        [
+          {
+            "node": "Canonical Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Canonical Payload": {
+      "main": [
+        [
+          {
+            "node": "Required Fields Present",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Required Fields Present": {
+      "main": [
+        [
+          {
+            "node": "POST /process-order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Missing Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /process-order": {
+      "main": [
+        [
+          {
+            "node": "Respond API Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "version": "1.0.0",
+    "phase": "03"
+  },
+  "versionId": "03-process-order-v1.0.0"
+}
