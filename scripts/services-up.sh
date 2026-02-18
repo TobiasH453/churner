@@ -5,26 +5,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/service-env.sh"
 
-if ! command -v pm2 >/dev/null 2>&1; then
-  echo "ERROR: pm2 is required but not installed. Run: npm install -g pm2" >&2
+usage() {
+  cat <<'EOF'
+Usage: bash scripts/services-up.sh
+
+Starts API and n8n services using PM2 ecosystem config.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+require_command "pm2" "npm install -g pm2" || exit 1
+
+mkdir -p "${REPO_ROOT}/logs" "${PM2_HOME}" "${N8N_USER_FOLDER}"
+
+print_info "Starting services from ${REPO_ROOT}/ecosystem.config.js"
+if pm2 start "${REPO_ROOT}/ecosystem.config.js" --update-env >/dev/null; then
+  pm2 save >/dev/null
+  print_pass "Services started and PM2 state saved."
+else
+  print_fail "PM2 failed to start one or more services."
+  print_remediation "Run: source scripts/service-env.sh && pm2 logs --lines 100"
   exit 1
 fi
 
-mkdir -p "${REPO_ROOT}/logs"
-mkdir -p "${PM2_HOME}"
-mkdir -p "${N8N_USER_FOLDER}"
-
-echo "Starting services with PM2..."
-pm2 start "${REPO_ROOT}/ecosystem.config.js" --update-env
-pm2 save
-
-echo
-echo "Services started."
-echo "PM2 home:          ${PM2_HOME}"
-echo "PM2 app (API):     ${AMAZON_AGENT_PM2_NAME}"
-echo "PM2 app (n8n):     ${N8N_PM2_NAME}"
-echo "n8n user folder:   ${N8N_USER_FOLDER}"
-echo "n8n UI:            http://localhost:${N8N_PORT}"
-echo "Python API health: http://localhost:${SERVER_PORT}/health"
-echo
-pm2 status
+print_info "PM2 home: ${PM2_HOME}"
+print_info "API app: ${AMAZON_AGENT_PM2_NAME}"
+print_info "n8n app: ${N8N_PM2_NAME}"
+print_info "API health: http://localhost:${SERVER_PORT}/health"
+print_info "n8n health: http://localhost:${N8N_PORT}/healthz"
+print_info "Next: bash scripts/services-status.sh"

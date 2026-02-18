@@ -26,3 +26,38 @@ export N8N_PORT="${N8N_PORT:-15678}"
 export N8N_USER_FOLDER="${N8N_USER_FOLDER:-${REPO_ROOT}/.n8n}"
 export PYTHON_BIN="${PYTHON_BIN:-${REPO_ROOT}/venv314/bin/python}"
 export N8N_BIN="${N8N_BIN:-/usr/local/bin/n8n}"
+
+print_info() {
+  printf '[INFO] %s\n' "$1"
+}
+
+print_pass() {
+  printf '[PASS] %s\n' "$1"
+}
+
+print_warn() {
+  printf '[WARN] %s\n' "$1" >&2
+}
+
+print_fail() {
+  printf '[FAIL] %s\n' "$1" >&2
+}
+
+print_remediation() {
+  printf '       Next: %s\n' "$1" >&2
+}
+
+require_command() {
+  local cmd="$1"
+  local remediation="${2:-Install ${cmd} and rerun the command.}"
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    print_fail "Missing dependency: ${cmd}"
+    print_remediation "${remediation}"
+    return 1
+  fi
+  return 0
+}
+
+is_positive_integer() {
+  [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]
+}
