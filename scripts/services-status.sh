@@ -25,29 +25,19 @@ failed=0
 
 check_pm2_process() {
   local process_name="$1"
-  local state
+  local state=""
+  local describe_output
 
-  if ! state="$(
-    pm2 jlist 2>/dev/null | node -e '
-      const fs = require("fs");
-      const procName = process.argv[1];
-      const data = fs.readFileSync(0, "utf8");
-      let list = [];
-      try {
-        list = JSON.parse(data);
-      } catch (_) {
-        process.exit(3);
-      }
-      const proc = list.find((item) => item && item.name === procName);
-      if (!proc) process.exit(2);
-      const status = (proc.pm2_env && proc.pm2_env.status) || "unknown";
-      process.stdout.write(status);
-    ' "${process_name}"
-  )"; then
+  if ! describe_output="$(pm2 describe "${process_name}" 2>/dev/null)"; then
     print_fail "PM2 process not found: ${process_name}"
     print_remediation "Run: bash scripts/services-up.sh"
     failed=1
     return
+  fi
+
+  state="$(printf '%s\n' "${describe_output}" | sed -nE 's/.*status[[:space:]]*[|│][[:space:]]*([a-zA-Z_-]+).*/\1/p' | head -1)"
+  if [[ -z "${state}" ]]; then
+    state="unknown"
   fi
 
   if [[ "${state}" == "online" ]]; then
@@ -62,11 +52,12 @@ check_pm2_process() {
 check_endpoint() {
   local label="$1"
   local url="$2"
+  local remediation_target="$3"
   if curl -fsS --max-time 5 "${url}" >/dev/null 2>&1; then
     print_pass "${label}: ${url}"
   else
     print_fail "${label}: ${url}"
-    print_remediation "Run: bash scripts/services-logs.sh all 120"
+    print_remediation "Run: bash scripts/services-logs.sh ${remediation_target} 120"
     failed=1
   fi
 }
@@ -76,8 +67,8 @@ check_pm2_process "${AMAZON_AGENT_PM2_NAME}"
 check_pm2_process "${N8N_PM2_NAME}"
 
 print_info "Endpoint layer checks"
-check_endpoint "API /health" "http://localhost:${SERVER_PORT}/health"
-check_endpoint "n8n /healthz" "http://localhost:${N8N_PORT}/healthz"
+check_endpoint "API /health" "http://localhost:${SERVER_PORT}/health" "amazon-agent"
+check_endpoint "n8n /healthz" "http://localhost:${N8N_PORT}/healthz" "n8n-server"
 
 if [[ "${failed}" -ne 0 ]]; then
   print_fail "Runtime status check failed."

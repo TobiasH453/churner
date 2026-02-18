@@ -35,6 +35,7 @@ fi
 print_info "PM2 home: ${PM2_HOME}"
 print_info "API app: ${AMAZON_AGENT_PM2_NAME}"
 print_info "n8n app: ${N8N_PM2_NAME}"
+print_info "n8n health endpoint: enabled (QUEUE_HEALTH_CHECK_ACTIVE=true)"
 print_info "API health: http://localhost:${SERVER_PORT}/health"
 print_info "n8n health: http://localhost:${N8N_PORT}/healthz"
 print_info "Next: bash scripts/services-status.sh"
