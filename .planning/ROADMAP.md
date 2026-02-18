@@ -11,7 +11,7 @@ This roadmap turns an already-working local automation system into a shippable m
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
-- [ ] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
+- [x] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
 - [ ] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
 - [ ] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
 - [ ] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
@@ -47,8 +47,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Harden service lifecycle scripts and command UX
-- [ ] 02-02: Validate operational script behavior from fresh install state
+- [x] 02-01: Harden service lifecycle scripts and command UX
+- [x] 02-02: Validate operational script behavior from fresh install state
 
 ### Phase 3: n8n Workflow Packaging & Contract Alignment
 **Goal**: Workflow import is reproducible and its payload contract is explicitly aligned to API expectations.
@@ -114,7 +114,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Installer & Secure Bootstrap | 4/4 | Complete | 2026-02-17 |
-| 2. Runtime Service Operations | 0/2 | Not started | - |
+| 2. Runtime Service Operations | 2/2 | Complete | 2026-02-18 |
 | 3. n8n Workflow Packaging & Contract Alignment | 0/3 | Not started | - |
 | 4. Smoke Verification Harness | 0/3 | Not started | - |
 | 5. Troubleshooting & Diagnostics | 0/2 | Not started | - |
