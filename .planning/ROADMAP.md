@@ -13,7 +13,7 @@ This roadmap turns an already-working local automation system into a shippable m
 - [x] **Phase 1: Installer & Secure Bootstrap** - Build deterministic setup path with strict local secret handling
 - [x] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
 - [x] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
-- [ ] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
+- [x] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
 - [ ] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
 - [ ] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
 
@@ -77,9 +77,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: Build smoke test runner and output format
-- [ ] 04-02: Add order path validation checks
-- [ ] 04-03: Add shipping path validation checks and failure guidance
+- [x] 04-01: Build smoke test runner and output format
+- [x] 04-02: Add order path validation checks
+- [x] 04-03: Add shipping path validation checks and failure guidance
 
 ### Phase 5: Troubleshooting & Diagnostics
 **Goal**: Support workflows are fast, safe, and reproducible for non-technical users.
@@ -116,6 +116,6 @@ Plans:
 | 1. Installer & Secure Bootstrap | 4/4 | Complete | 2026-02-17 |
 | 2. Runtime Service Operations | 2/2 | Complete | 2026-02-18 |
 | 3. n8n Workflow Packaging & Contract Alignment | 3/3 | Complete | 2026-02-18 |
-| 4. Smoke Verification Harness | 0/3 | Not started | - |
+| 4. Smoke Verification Harness | 3/3 | Complete | 2026-02-19 |
 | 5. Troubleshooting & Diagnostics | 0/2 | Not started | - |
 | 6. Distribution & Release Readiness | 0/2 | Not started | - |
