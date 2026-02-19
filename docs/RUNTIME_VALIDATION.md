@@ -50,6 +50,22 @@ bash scripts/services-up.sh
 bash scripts/services-status.sh
 ```
 
+## Phase 4 Smoke Verification Handoff
+
+After runtime validation passes, run the smoke readiness command:
+
+```bash
+bash scripts/verify-smoke-readiness.sh
+```
+
+Expected baseline cues:
+- `[PASS] Check API health endpoint`
+- `[PASS] Smoke readiness baseline passed.`
+
+If smoke fails:
+- Follow the printed `Next:` command first.
+- Then review `docs/OPERATIONS.md` recovery steps before rerunning the smoke command.
+
 ## Common Failure Patterns
 
 1. Missing PM2 dependency
