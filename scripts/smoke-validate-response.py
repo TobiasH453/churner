@@ -23,6 +23,11 @@ def parse_args() -> argparse.Namespace:
         choices=["order_confirmation", "shipping_confirmation"],
         help="Expected email_type in the response payload.",
     )
+    parser.add_argument(
+        "--require-success",
+        action="store_true",
+        help="Fail validation when response.success is false.",
+    )
     return parser.parse_args()
 
 
@@ -68,8 +73,12 @@ def main() -> int:
         return fail("missing or empty order_number in response")
     if response.execution_time_seconds < 0:
         return fail("execution_time_seconds cannot be negative")
+    if args.require_success and not response.success:
+        return fail("response.success is false")
 
-    print(f"PASS: response contract valid ({args.expected_email_type})")
+    print(
+        f"PASS: response contract valid ({args.expected_email_type}, success={response.success})"
+    )
     return 0
 
 

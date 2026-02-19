@@ -22,6 +22,7 @@ Usage: bash scripts/verify-smoke-readiness.sh
 Runs the Phase 4 smoke readiness checks:
 1) API health endpoint check
 2) Order-confirmation contract check
+3) Shipping-confirmation contract check
 
 Returns non-zero on blocking failures.
 EOF
@@ -95,6 +96,39 @@ check_order_contract() {
   return 0
 }
 
+check_shipping_contract() {
+  local payload response shipping_order
+
+  shipping_order="${SMOKE_SHIPPING_ORDER_NUMBER:-${SMOKE_ORDER_NUMBER}}"
+  if [[ -z "${shipping_order}" ]]; then
+    print_fail "Missing smoke input: SMOKE_SHIPPING_ORDER_NUMBER (or SMOKE_ORDER_NUMBER fallback)"
+    return 1
+  fi
+
+  payload="$(printf '{"email_type":"shipping_confirmation","order_number":"%s","account_type":"%s"}' \
+    "${shipping_order}" "${SMOKE_ORDER_ACCOUNT_TYPE}")"
+
+  if ! response="$(curl --silent --show-error \
+    --fail-with-body \
+    --connect-timeout "${SMOKE_CONNECT_TIMEOUT}" \
+    --max-time "${SMOKE_REQUEST_TIMEOUT}" \
+    -H 'Content-Type: application/json' \
+    --data "${payload}" \
+    "${SMOKE_API_URL}")"; then
+    print_fail "Shipping smoke request failed: ${SMOKE_API_URL}"
+    return 1
+  fi
+
+  if ! printf '%s' "${response}" | "${SMOKE_PYTHON_BIN}" "${SCRIPT_DIR}/smoke-validate-response.py" \
+    --expected-email-type shipping_confirmation; then
+    print_fail "Shipping smoke response failed contract validation."
+    return 1
+  fi
+
+  print_info "Shipping response contract validated."
+  return 0
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
@@ -117,11 +151,25 @@ run_stage \
   "Run: bash scripts/services-status.sh" \
   check_health || exit $?
 
+order_failed=0
+shipping_failed=0
+
 run_stage \
   "Check order-confirmation contract path" \
   "Export SMOKE_ORDER_NUMBER and rerun: SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh" \
-  check_order_contract || exit $?
+  check_order_contract || order_failed=1
 
-print_warn "Shipping contract check is added in Phase 4 plan 04-03."
-print_pass "Smoke readiness checks passed: health + order."
-print_info "Next: add shipping check completion in Phase 4 plan 04-03."
+run_stage \
+  "Check shipping-confirmation contract path" \
+  "Export SMOKE_SHIPPING_ORDER_NUMBER (or SMOKE_ORDER_NUMBER) and rerun: SMOKE_SHIPPING_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh" \
+  check_shipping_contract || shipping_failed=1
+
+if [[ "${order_failed}" -ne 0 || "${shipping_failed}" -ne 0 ]]; then
+  print_fail "Smoke readiness checks failed."
+  print_remediation "Run: bash scripts/services-logs.sh amazon-agent 120"
+  print_remediation "Review: docs/SMOKE_VERIFICATION.md"
+  exit 1
+fi
+
+print_pass "Smoke readiness checks passed: health + order + shipping."
+print_info "Next: use docs/SMOKE_VERIFICATION.md for rerun scenarios and troubleshooting."
