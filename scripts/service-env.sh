@@ -26,6 +26,9 @@ export N8N_PORT="${N8N_PORT:-15678}"
 export N8N_USER_FOLDER="${N8N_USER_FOLDER:-${REPO_ROOT}/.n8n}"
 export PYTHON_BIN="${PYTHON_BIN:-${REPO_ROOT}/venv314/bin/python}"
 export N8N_BIN="${N8N_BIN:-/usr/local/bin/n8n}"
+export SMOKE_CONNECT_TIMEOUT="${SMOKE_CONNECT_TIMEOUT:-3}"
+export SMOKE_HEALTH_TIMEOUT="${SMOKE_HEALTH_TIMEOUT:-10}"
+export SMOKE_REQUEST_TIMEOUT="${SMOKE_REQUEST_TIMEOUT:-45}"
 
 print_info() {
   printf '[INFO] %s\n' "$1"

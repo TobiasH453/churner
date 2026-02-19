@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/service-env.sh"
 
+SMOKE_HEALTH_TIMEOUT="${SMOKE_HEALTH_TIMEOUT:-${SMOKE_REQUEST_TIMEOUT}}"
 SMOKE_HEALTH_URL="${SMOKE_HEALTH_URL:-http://localhost:${SERVER_PORT}/health}"
 
 usage() {
@@ -60,6 +61,7 @@ fi
 
 require_command "curl" "Install curl and rerun: bash scripts/verify-smoke-readiness.sh" || exit 1
 
+print_info "Stage order: health -> order -> shipping"
 run_stage \
   "Check API health endpoint" \
   "Run: bash scripts/services-status.sh" \
