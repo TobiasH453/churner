@@ -6,13 +6,22 @@ source "${SCRIPT_DIR}/service-env.sh"
 
 SMOKE_HEALTH_TIMEOUT="${SMOKE_HEALTH_TIMEOUT:-${SMOKE_REQUEST_TIMEOUT}}"
 SMOKE_HEALTH_URL="${SMOKE_HEALTH_URL:-http://localhost:${SERVER_PORT}/health}"
+SMOKE_API_URL="${SMOKE_API_URL:-http://localhost:${SERVER_PORT}/process-order}"
+SMOKE_ORDER_NUMBER="${SMOKE_ORDER_NUMBER:-}"
+SMOKE_ORDER_ACCOUNT_TYPE="${SMOKE_ORDER_ACCOUNT_TYPE:-amz_personal}"
+if [[ -x "${PYTHON_BIN}" ]]; then
+  SMOKE_PYTHON_BIN="${SMOKE_PYTHON_BIN:-${PYTHON_BIN}}"
+else
+  SMOKE_PYTHON_BIN="${SMOKE_PYTHON_BIN:-python3}"
+fi
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/verify-smoke-readiness.sh
 
-Runs the Phase 4 smoke readiness baseline:
+Runs the Phase 4 smoke readiness checks:
 1) API health endpoint check
+2) Order-confirmation contract check
 
 Returns non-zero on blocking failures.
 EOF
@@ -54,12 +63,53 @@ check_health() {
   return 0
 }
 
+check_order_contract() {
+  local payload response
+
+  if [[ -z "${SMOKE_ORDER_NUMBER}" ]]; then
+    print_fail "Missing smoke input: SMOKE_ORDER_NUMBER"
+    return 1
+  fi
+
+  payload="$(printf '{"email_type":"order_confirmation","order_number":"%s","account_type":"%s"}' \
+    "${SMOKE_ORDER_NUMBER}" "${SMOKE_ORDER_ACCOUNT_TYPE}")"
+
+  if ! response="$(curl --silent --show-error \
+    --fail-with-body \
+    --connect-timeout "${SMOKE_CONNECT_TIMEOUT}" \
+    --max-time "${SMOKE_REQUEST_TIMEOUT}" \
+    -H 'Content-Type: application/json' \
+    --data "${payload}" \
+    "${SMOKE_API_URL}")"; then
+    print_fail "Order smoke request failed: ${SMOKE_API_URL}"
+    return 1
+  fi
+
+  if ! printf '%s' "${response}" | "${SMOKE_PYTHON_BIN}" "${SCRIPT_DIR}/smoke-validate-response.py" \
+    --expected-email-type order_confirmation; then
+    print_fail "Order smoke response failed contract validation."
+    return 1
+  fi
+
+  print_info "Order response contract validated."
+  return 0
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
 
 require_command "curl" "Install curl and rerun: bash scripts/verify-smoke-readiness.sh" || exit 1
+if [[ "${SMOKE_PYTHON_BIN}" == */* ]]; then
+  if [[ ! -x "${SMOKE_PYTHON_BIN}" ]]; then
+    print_fail "Missing dependency: ${SMOKE_PYTHON_BIN}"
+    print_remediation "Create project virtualenv or set SMOKE_PYTHON_BIN=python3 before rerunning."
+    exit 1
+  fi
+else
+  require_command "${SMOKE_PYTHON_BIN}" "Install Python 3 and rerun: bash scripts/verify-smoke-readiness.sh" || exit 1
+fi
 
 print_info "Stage order: health -> order -> shipping"
 run_stage \
@@ -67,6 +117,11 @@ run_stage \
   "Run: bash scripts/services-status.sh" \
   check_health || exit $?
 
-print_warn "Order and shipping contract checks are added in Phase 4 plans 04-02 and 04-03."
-print_pass "Smoke readiness baseline passed."
-print_info "Next: bash scripts/services-status.sh"
+run_stage \
+  "Check order-confirmation contract path" \
+  "Export SMOKE_ORDER_NUMBER and rerun: SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh" \
+  check_order_contract || exit $?
+
+print_warn "Shipping contract check is added in Phase 4 plan 04-03."
+print_pass "Smoke readiness checks passed: health + order."
+print_info "Next: add shipping check completion in Phase 4 plan 04-03."
