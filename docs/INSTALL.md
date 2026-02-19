@@ -126,3 +126,19 @@ Then follow:
 Expected verification cue before/after import:
 
 - `[PASS] n8n workflow contract verification passed.`
+
+## 8) Smoke verification handoff
+
+After runtime and n8n contract verification pass, run smoke verification:
+
+```bash
+SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
+```
+
+Expected smoke verification cue:
+
+- `[PASS] Smoke readiness checks passed: health + order + shipping.`
+
+If smoke verification fails:
+- Follow printed `Next:` commands first.
+- Then review `docs/SMOKE_VERIFICATION.md` for stage-specific remediation and rerun flow.

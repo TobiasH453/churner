@@ -27,6 +27,14 @@ bash scripts/verify-n8n-workflow-contract.sh
 
 See `docs/N8N_INTEGRATION.md` for import/configuration flow and `docs/N8N_PAYLOAD_CONTRACT.md` for field-level contract rules.
 
+Phase 4 smoke verification handoff:
+
+```bash
+SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
+```
+
+See `docs/SMOKE_VERIFICATION.md` for order/shipping smoke input contract, stage-level interpretation, and rerun guidance.
+
 Service-specific logs:
 
 ```bash
