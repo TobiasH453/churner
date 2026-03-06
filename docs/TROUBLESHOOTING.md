@@ -45,7 +45,21 @@ If first-response commands do not resolve the issue, collect diagnostics and att
 bash scripts/collect-diagnostics.sh
 ```
 
-(Collector is added in Phase 5 Plan 02.)
+Optional controls:
+
+```bash
+bash scripts/collect-diagnostics.sh --lines 80 --timeout 8
+bash scripts/collect-diagnostics.sh --output-dir /tmp/diag --no-archive
+```
+
+Collector output:
+- Default directory: `diagnostics/diag-YYYYMMDD-HHMMSS/`
+- Optional archive: `diagnostics/diag-YYYYMMDD-HHMMSS.tar.gz`
+- Key files: `manifest.txt`, `commands/*.txt`, `logs/*.log`, `system/*.txt`
+
+Share path for support:
+- Send the diagnostics directory (or `.tar.gz` archive) printed by the command.
+- Do not send raw `.env` or browser profile/session files separately.
 
 ## Guided Recovery Flows
 

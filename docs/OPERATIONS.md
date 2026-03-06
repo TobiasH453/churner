@@ -35,6 +35,14 @@ SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
 
 See `docs/SMOKE_VERIFICATION.md` for order/shipping smoke input contract, stage-level interpretation, and rerun guidance.
 
+Phase 5 diagnostics escalation command:
+
+```bash
+bash scripts/collect-diagnostics.sh
+```
+
+Use this when first-response recovery fails. The command prints the exact diagnostics bundle path to share with support.
+
 Service-specific logs:
 
 ```bash

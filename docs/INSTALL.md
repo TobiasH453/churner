@@ -144,3 +144,8 @@ If smoke verification fails:
 - Follow printed `Next:` commands first.
 - Then review `docs/SMOKE_VERIFICATION.md` for stage-specific remediation and rerun flow.
 - If still blocked, use `docs/TROUBLESHOOTING.md` for canonical triage and escalation flow.
+- Collect a diagnostics bundle for support if still unresolved:
+
+```bash
+bash scripts/collect-diagnostics.sh
+```
