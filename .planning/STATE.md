@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** A new Mac user can install and run the workflow locally in under 20 minutes, with both order-confirmation and shipping-confirmation paths working end-to-end.
-**Current focus:** Phase 5 - Troubleshooting & Diagnostics
+**Current focus:** Phase 6 - Distribution & Release Readiness
 
 ## Current Position
 
-Phase: 5 of 6 (Troubleshooting & Diagnostics)
+Phase: 6 of 6 (Distribution & Release Readiness)
 Plan: 0 of 2 in current phase
-Status: Phase 4 complete and verified, ready to plan
-Last activity: 2026-02-19 — Completed Phase 4 execution and verification (plans 04-01 through 04-03)
+Status: Phase 5 complete and verified, ready to discuss/plan
+Last activity: 2026-03-06 — Completed Phase 5 execution and verification (`05-01`, `05-02`, `05-VERIFICATION.md`)
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 12
-- Average duration: 19.0 min
+- Average duration: 16.4 min
 - Total execution time: 3.8 hours
 
 **By Phase:**
@@ -31,10 +31,11 @@ Progress: [███████░░░] 67%
 | 2. Runtime Service Operations | 2 | 36 min | 18.0 min |
 | 3. n8n Workflow Packaging & Contract Alignment | 3 | 48 min | 16.0 min |
 | 4. Smoke Verification Harness | 3 | 72 min | 24.0 min |
+| 5. Troubleshooting & Diagnostics | 2 | 2 min | 1.0 min |
 
 **Recent Trend:**
-- Last 4 plans: 03-03, 04-01, 04-02, 04-03
-- Trend: Stable (functional smoke harness added with contract checks)
+- Last 4 plans: 04-02, 04-03, 05-01, 05-02
+- Trend: Stable (supportability tooling + docs completed)
 
 *Updated after each plan completion*
 
@@ -58,10 +59,14 @@ Recent decisions affecting current work:
 - Phase 4 smoke verification fixed to canonical command `bash scripts/verify-smoke-readiness.sh` with stage order `health -> order -> shipping`
 - Phase 4 contract-path checks fixed to validator `scripts/smoke-validate-response.py` against `models.AgentResponse`
 - Phase 4 verification passed with 4/4 must-haves satisfied (`.planning/phases/04-smoke-verification-harness/04-VERIFICATION.md`)
+- Phase 5 planning created with two executable plans: troubleshooting runbook (`05-01`) and redaction-safe diagnostics collector (`05-02`)
+- Phase 5 troubleshooting baseline fixed to canonical runbook `docs/TROUBLESHOOTING.md` with command-first recovery flows
+- Phase 5 diagnostics baseline fixed to `bash scripts/collect-diagnostics.sh` with redaction and forbidden-path exclusion auditing
+- Phase 5 verification passed with 3/3 must-haves satisfied (`.planning/phases/05-troubleshooting-diagnostics/05-VERIFICATION.md`)
 
 ### Pending Todos
 
-- Begin Phase 5 discussion/planning for troubleshooting and diagnostics.
+- Discuss or plan Phase 6 release packaging flow.
 
 ### Blockers/Concerns
 
@@ -69,6 +74,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-19 03:20
-Stopped at: Phase 4 complete and verified
+Last session: 2026-03-06 14:04 PST
+Stopped at: Phase 5 complete and verified; next command `/prompts:gsd-discuss-phase 6`
 Resume file: None

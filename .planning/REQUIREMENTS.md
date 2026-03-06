@@ -33,8 +33,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Supportability
 
-- [ ] **SUP-01**: Operator has a troubleshooting document with clear recovery paths for common install/runtime failures.
-- [ ] **SUP-02**: Operator can run a diagnostics script that collects actionable logs/config metadata with secret redaction.
+- [x] **SUP-01**: Operator has a troubleshooting document with clear recovery paths for common install/runtime failures.
+- [x] **SUP-02**: Operator can run a diagnostics script that collects actionable logs/config metadata with secret redaction.
 
 ### Distribution
 
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-01 | Phase 4 | Complete |
 | VER-02 | Phase 4 | Complete |
 | VER-03 | Phase 4 | Complete |
-| SUP-01 | Phase 5 | Pending |
-| SUP-02 | Phase 5 | Pending |
+| SUP-01 | Phase 5 | Complete |
+| SUP-02 | Phase 5 | Complete |
 | DIST-01 | Phase 6 | Pending |
 | DIST-02 | Phase 6 | Pending |
 
@@ -98,4 +98,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-17*
-*Last updated: 2026-02-19 after Phase 4 completion*
+*Last updated: 2026-03-06 after Phase 5 completion*

@@ -14,7 +14,7 @@ This roadmap turns an already-working local automation system into a shippable m
 - [x] **Phase 2: Runtime Service Operations** - Standardize start/stop/status/log operations for user-facing reliability
 - [x] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
 - [x] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
-- [ ] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
+- [x] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
 - [ ] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
 
 ## Phase Details
@@ -92,8 +92,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Author troubleshooting doc from observed failure modes
-- [ ] 05-02: Implement diagnostics collector with redaction rules
+- [x] 05-01: Author troubleshooting doc from observed failure modes
+- [x] 05-02: Implement diagnostics collector with redaction rules
 
 ### Phase 6: Distribution & Release Readiness
 **Goal**: Package and docs are release-ready for macOS-first user distribution.
@@ -117,5 +117,5 @@ Plans:
 | 2. Runtime Service Operations | 2/2 | Complete | 2026-02-18 |
 | 3. n8n Workflow Packaging & Contract Alignment | 3/3 | Complete | 2026-02-18 |
 | 4. Smoke Verification Harness | 3/3 | Complete | 2026-02-19 |
-| 5. Troubleshooting & Diagnostics | 0/2 | Not started | - |
+| 5. Troubleshooting & Diagnostics | 2/2 | Complete | 2026-03-06 |
 | 6. Distribution & Release Readiness | 0/2 | Not started | - |
