@@ -9,6 +9,7 @@ LINES_DEFAULT=120
 ARCHIVE_ENABLED=1
 OUTPUT_BASE="${REPO_ROOT}/diagnostics"
 CAPTURE_TIMEOUT=12
+FORBIDDEN_PATH_PATTERNS=".env|browser-profile|\\.n8n|\\.pm2"
 
 usage() {
   cat <<'USAGE'
@@ -79,6 +80,32 @@ capture_command() {
   } >"${outfile}.tmp"
   mv "${outfile}.tmp" "${outfile}"
   rm -f "${raw_out}"
+}
+
+write_redaction_probe() {
+  {
+    echo "sample_input:"
+    echo "API_KEY=example-123"
+    echo "Authorization: Bearer token-xyz"
+    echo "set-cookie: sessionid=abcd; path=/"
+    echo ""
+    echo "sample_output:"
+    printf 'API_KEY=example-123\nAuthorization: Bearer token-xyz\nset-cookie: sessionid=abcd; path=/\n' | redact_stream
+  } > "$1"
+}
+
+write_exclusion_audit() {
+  local outfile="$1"
+  {
+    echo "forbidden_path_patterns=${FORBIDDEN_PATH_PATTERNS}"
+    if find "${OUT_DIR}" -type f | rg -q "${FORBIDDEN_PATH_PATTERNS}"; then
+      echo "status=fail"
+      echo "details=forbidden file pattern found in diagnostics output"
+    else
+      echo "status=pass"
+      echo "details=no forbidden file patterns found in diagnostics output"
+    fi
+  } > "${outfile}"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -154,6 +181,8 @@ capture_command "${LOG_DIR}/amazon-agent.log" "${CAPTURE_TIMEOUT}" pm2 logs "${A
 capture_command "${LOG_DIR}/n8n-server.log" "${CAPTURE_TIMEOUT}" pm2 logs "${N8N_PM2_NAME}" --lines "${LINES_DEFAULT}" --nostream
 
 capture_command "${SYS_DIR}/versions.txt" "${CAPTURE_TIMEOUT}" bash -lc 'bash --version | head -1; python3 --version; node --version; pm2 --version'
+write_redaction_probe "${SYS_DIR}/redaction-probe.txt"
+write_exclusion_audit "${SYS_DIR}/exclusion-audit.txt"
 
 {
   echo "captured_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -171,6 +200,7 @@ capture_command "${SYS_DIR}/versions.txt" "${CAPTURE_TIMEOUT}" bash -lc 'bash --
   echo "diagnostics_bundle=${OUT_DIR}"
   echo "generated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "excluded_paths=.env,data/browser-profile*,data/browser-profile-business*,.n8n,.pm2"
+  echo "forbidden_path_patterns=${FORBIDDEN_PATH_PATTERNS}"
   echo "redaction=enabled(secret-like values replaced with [REDACTED])"
   echo "contents:"
   find "${OUT_DIR}" -type f | sed "s#${OUT_DIR}/#- #"
