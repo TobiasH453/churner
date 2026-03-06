@@ -46,3 +46,86 @@ bash scripts/collect-diagnostics.sh
 ```
 
 (Collector is added in Phase 5 Plan 02.)
+
+## Guided Recovery Flows
+
+Use these when you need a deterministic path from failure to rerun.
+
+### Flow A: Runtime Status Failure
+
+Start when you see:
+- `[FAIL] Runtime status check failed.`
+- `[FAIL] PM2 ...`
+- `[FAIL] API /health ...` or `[FAIL] n8n /healthz ...`
+
+Run in order:
+
+```bash
+bash scripts/services-logs.sh amazon-agent 120
+bash scripts/services-logs.sh n8n-server 120
+bash scripts/services-up.sh
+bash scripts/services-status.sh
+```
+
+Success cues:
+- `[PASS] PM2 <service>: online` for both services
+- `[PASS] API /health: ...`
+- `[PASS] n8n /healthz: ...`
+- `[PASS] Runtime status check passed.`
+
+Next:
+- Continue with `bash scripts/verify-runtime-operations.sh`
+- Then continue with n8n/smoke verification flow
+
+### Flow B: n8n Contract Verification Failure
+
+Start when you see:
+- `[FAIL] Workflow contract checks failed.`
+- Missing workflow artifact or invalid workflow JSON errors
+
+Run in order:
+
+```bash
+python3 -m json.tool n8n-workflows/03-process-order-v1.0.0.json >/dev/null
+python3 test_n8n_process_order_contract.py
+bash scripts/verify-n8n-workflow-contract.sh
+```
+
+If still failing:
+- Re-import `n8n-workflows/03-process-order-v1.0.0.json` in n8n
+- Rebind credentials and confirm local API target
+- Re-run `bash scripts/verify-n8n-workflow-contract.sh`
+
+Success cue:
+- `[PASS] n8n workflow contract verification passed.`
+
+Next:
+- Resume smoke verification
+
+### Flow C: Smoke Verification Failure
+
+Start when you see:
+- `[FAIL] Missing smoke input: ...`
+- `[FAIL] Order smoke request failed ...`
+- `[FAIL] Shipping smoke request failed ...`
+- `FAIL: response did not satisfy AgentResponse contract ...`
+
+Run in order:
+
+```bash
+bash scripts/services-status.sh
+bash scripts/services-logs.sh amazon-agent 120
+SMOKE_ORDER_NUMBER=<order-id> bash scripts/verify-smoke-readiness.sh
+```
+
+If shipping uses a different order id:
+
+```bash
+SMOKE_ORDER_NUMBER=<order-id> SMOKE_SHIPPING_ORDER_NUMBER=<shipping-order-id> bash scripts/verify-smoke-readiness.sh
+```
+
+Success cue:
+- `[PASS] Smoke readiness checks passed: health + order + shipping.`
+
+Next:
+- Return to normal operator flow in `docs/INSTALL.md` / `docs/OPERATIONS.md`
