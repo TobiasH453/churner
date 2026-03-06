@@ -109,6 +109,7 @@ Expected runtime validation result:
 If runtime validation fails:
 - Follow the printed `Next:` remediation command
 - Refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow
+- Use `docs/TROUBLESHOOTING.md` for consolidated recovery paths (install/runtime/n8n/smoke)
 
 ## 7) n8n integration handoff
 
@@ -142,3 +143,4 @@ Expected smoke verification cue:
 If smoke verification fails:
 - Follow printed `Next:` commands first.
 - Then review `docs/SMOKE_VERIFICATION.md` for stage-specific remediation and rerun flow.
+- If still blocked, use `docs/TROUBLESHOOTING.md` for canonical triage and escalation flow.

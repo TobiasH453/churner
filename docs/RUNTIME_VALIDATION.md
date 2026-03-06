@@ -50,6 +50,8 @@ bash scripts/services-up.sh
 bash scripts/services-status.sh
 ```
 
+If still unresolved, continue in `docs/TROUBLESHOOTING.md` (Flow A: Runtime Status Failure).
+
 ## Phase 4 Smoke Verification Handoff
 
 After runtime validation passes, run the smoke readiness command:
@@ -60,11 +62,12 @@ bash scripts/verify-smoke-readiness.sh
 
 Expected baseline cues:
 - `[PASS] Check API health endpoint`
-- `[PASS] Smoke readiness baseline passed.`
+- `[PASS] Smoke readiness checks passed: health + order + shipping.`
 
 If smoke fails:
 - Follow the printed `Next:` command first.
 - Then review `docs/OPERATIONS.md` recovery steps before rerunning the smoke command.
+- If still blocked, use `docs/TROUBLESHOOTING.md` (Flow C: Smoke Verification Failure).
 
 ## Common Failure Patterns
 

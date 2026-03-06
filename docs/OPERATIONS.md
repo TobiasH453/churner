@@ -133,6 +133,7 @@ If status fails:
 2. `bash scripts/services-logs.sh n8n-server 120`
 3. `bash scripts/services-up.sh`
 4. `bash scripts/services-status.sh`
+5. If unresolved, follow `docs/TROUBLESHOOTING.md` runtime flow.
 
 Port collision checks:
 
@@ -156,3 +157,4 @@ If n8n import/webhook behavior is inconsistent with expected payload contract:
 2. Rebind credentials and confirm local API target in workflow HTTP node.
 3. Run `bash scripts/verify-n8n-workflow-contract.sh`.
 4. Follow `docs/N8N_INTEGRATION.md` for test-vs-production webhook mode checks.
+5. If unresolved, continue with `docs/TROUBLESHOOTING.md` n8n contract flow.

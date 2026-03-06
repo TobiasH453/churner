@@ -104,3 +104,4 @@ Review API contract sources:
 
 For full remediation flow, see:
 - `docs/OPERATIONS.md`
+- `docs/TROUBLESHOOTING.md`
