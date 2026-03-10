@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** A new Mac user can install and run the workflow locally in under 20 minutes, with both order-confirmation and shipping-confirmation paths working end-to-end.
-**Current focus:** Phase 6 gap closure executed; ready for final verification and audit rerun
+**Current focus:** Phase 6 gap closure verified; ready for milestone audit rerun
 
 ## Current Position
 
 Phase: 6 of 6 (Distribution & Release Readiness)
 Plan: 4 of 4 in current phase
-Status: All roadmap phases complete; Phase 6 audit blockers addressed and awaiting final verification
-Last activity: 2026-03-10 - Executed Phase 6 gap-closure work for release flow alignment and committed-source packaging
+Status: All roadmap phases complete and re-verified; ready for milestone audit rerun
+Last activity: 2026-03-10 - Verified Phase 6 gap closure for release flow alignment, committed-source packaging, and metadata normalization
 
 Progress: [██████████] 100%
 
@@ -73,14 +73,14 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-- Rerun Phase 6 verification and milestone audit after gap closure.
+- Rerun milestone audit after Phase 6 gap closure.
 
 ### Blockers/Concerns
 
-None currently; final verification and milestone audit rerun are the remaining gates.
+None currently; milestone audit rerun is the remaining gate.
 
 ## Session Continuity
 
 Last session: 2026-03-10 13:33 PST
-Stopped at: Phase 6 audit gap closure in progress; next commands are final verification and milestone audit rerun
+Stopped at: Phase 6 gap closure complete; next command `/prompts:gsd-audit-milestone`
 Resume file: None
