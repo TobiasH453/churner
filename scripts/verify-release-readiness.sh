@@ -54,6 +54,7 @@ require_committed_path() {
 collect_committed_dir_files() {
   local dir_path="$1"
   local tracked_files=()
+  local tracked_file
 
   if [[ ! -d "${REPO_ROOT}/${dir_path}" ]]; then
     record_failure "Missing required directory: ${dir_path}"
@@ -65,7 +66,9 @@ collect_committed_dir_files() {
     return 0
   fi
 
-  mapfile -t tracked_files < <(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD -- "${dir_path}")
+  while IFS= read -r tracked_file; do
+    tracked_files+=("${tracked_file}")
+  done < <(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD -- "${dir_path}")
   if (( ${#tracked_files[@]} == 0 )); then
     record_failure "Required release directory has no committed contents at HEAD: ${dir_path}"
     return 0
@@ -75,22 +78,22 @@ collect_committed_dir_files() {
   print_pass "Committed release directory contents found: ${dir_path}"
 }
 
-assert_clean_release_inputs() {
+report_release_input_drift() {
   if (( ${#RELEASE_TRACKED_FILES[@]} == 0 )); then
     record_failure "Release tracked input list is empty."
     return 0
   fi
 
   if git -C "${REPO_ROOT}" diff --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
-    print_pass "Required release inputs are clean in the working tree."
+    print_pass "Required release inputs match committed HEAD in the working tree."
   else
-    record_failure "Required release inputs have uncommitted working-tree changes."
+    print_warn "Required release inputs have working-tree drift; release build will package committed HEAD versions instead."
   fi
 
   if git -C "${REPO_ROOT}" diff --cached --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
     print_pass "Required release inputs have no staged-only drift."
   else
-    record_failure "Required release inputs have staged but uncommitted changes."
+    print_warn "Required release inputs have staged-only drift; release build will package committed HEAD versions instead."
   fi
 }
 
@@ -197,7 +200,7 @@ for rel_path in docs scripts n8n-workflows; do
   collect_committed_dir_files "${rel_path}"
 done
 
-assert_clean_release_inputs
+report_release_input_drift
 
 print_info "Checking README release flow"
 assert_contains "README.md" "## Supported Platform and Prerequisites"
@@ -239,6 +242,7 @@ assert_contains "docs/RELEASE.md" ".env.example"
 assert_contains "docs/RELEASE.md" ".env"
 assert_contains "docs/RELEASE.md" "committed at `HEAD`"
 assert_contains "docs/RELEASE.md" "fail if any required release input is untracked"
+assert_contains "docs/RELEASE.md" "ignore dirty local-only changes"
 
 print_info "Checking release checklist gate"
 assert_contains "docs/RELEASE_CHECKLIST.md" "**Release version:**"

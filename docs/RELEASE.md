@@ -35,7 +35,8 @@ Release packaging is intentionally tied to repository state, not a dirty workspa
 
 - every required release input must already be committed at `HEAD`
 - the build and readiness checks fail if any required release input is untracked
-- the build and readiness checks fail if required release inputs have staged-only or working-tree drift
+- the build packages committed `HEAD` contents for required release inputs
+- the build can ignore dirty local-only changes outside committed release state
 
 This keeps the shipped `.zip` reproducible from committed source instead of silently packaging local-only files.
 
