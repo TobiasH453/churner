@@ -28,16 +28,52 @@ require_file() {
   fi
 }
 
+require_committed_path() {
+  local path="$1"
+  if ! git -C "${REPO_ROOT}" cat-file -e "HEAD:${path}" 2>/dev/null; then
+    print_fail "Required release input is not committed at HEAD: ${path}"
+    print_remediation "Commit ${path}, then rerun the release build."
+    exit 1
+  fi
+}
+
 copy_path() {
   local rel_path="$1"
   local source_path="${REPO_ROOT}/${rel_path}"
   local dest_path="${STAGE_ROOT}/${rel_path}"
 
   mkdir -p "$(dirname "${dest_path}")"
-  if [[ -d "${source_path}" ]]; then
-    cp -R "${source_path}" "${dest_path}"
-  else
-    cp "${source_path}" "${dest_path}"
+  cp "${source_path}" "${dest_path}"
+}
+
+collect_committed_dir_files() {
+  local dir_path="$1"
+  local tracked_files=()
+
+  require_file "${dir_path}"
+  require_committed_path "${dir_path}"
+  mapfile -t tracked_files < <(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD -- "${dir_path}")
+
+  if (( ${#tracked_files[@]} == 0 )); then
+    print_fail "Required release directory has no committed contents at HEAD: ${dir_path}"
+    print_remediation "Commit the required files under ${dir_path}, then rerun the release build."
+    exit 1
+  fi
+
+  RELEASE_TRACKED_FILES+=("${tracked_files[@]}")
+}
+
+assert_committed_clean_paths() {
+  if ! git -C "${REPO_ROOT}" diff --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
+    print_fail "Required release inputs have uncommitted working-tree changes."
+    print_remediation "Commit or restore the listed release input files before building the bundle."
+    exit 1
+  fi
+
+  if ! git -C "${REPO_ROOT}" diff --cached --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
+    print_fail "Required release inputs have staged but uncommitted changes."
+    print_remediation "Commit the staged release input files before building the bundle."
+    exit 1
   fi
 }
 
@@ -132,22 +168,27 @@ REQUIRED_ROOT_DIRS=(
   scripts
   n8n-workflows
 )
+RELEASE_TRACKED_FILES=()
 
 print_info "Preparing release bundle for ${RELEASE_VERSION}"
 mkdir -p "${OUTPUT_DIR}"
 
 for rel_path in "${REQUIRED_ROOT_FILES[@]}"; do
   require_file "${rel_path}"
+  require_committed_path "${rel_path}"
+  RELEASE_TRACKED_FILES+=("${rel_path}")
 done
 
 for rel_path in "${REQUIRED_ROOT_DIRS[@]}"; do
-  require_file "${rel_path}"
+  collect_committed_dir_files "${rel_path}"
 done
+
+assert_committed_clean_paths
 
 print_info "Staging release files at ${STAGE_ROOT}"
 mkdir -p "${STAGE_ROOT}"
 
-for rel_path in "${REQUIRED_ROOT_FILES[@]}"; do
+for rel_path in "${RELEASE_TRACKED_FILES[@]}"; do
   copy_path "${rel_path}"
 done
 
