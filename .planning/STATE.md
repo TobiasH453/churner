@@ -19,9 +19,9 @@ Progress: [██████████] 100%
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 17.1 min
-- Total execution time: 4.0 hours
+- Total plans completed: 16
+- Average duration: 16.1 min
+- Total execution time: 4.3 hours
 
 **By Phase:**
 
@@ -32,11 +32,11 @@ Progress: [██████████] 100%
 | 3. n8n Workflow Packaging & Contract Alignment | 3 | 48 min | 16.0 min |
 | 4. Smoke Verification Harness | 3 | 72 min | 24.0 min |
 | 5. Troubleshooting & Diagnostics | 2 | 2 min | 1.0 min |
-| 6. Distribution & Release Readiness | 2 | 12 min | 6.0 min |
+| 6. Distribution & Release Readiness | 4 | 28 min | 7.0 min |
 
 **Recent Trend:**
-- Last 4 plans: 05-01, 05-02, 06-01, 06-02
-- Trend: Stable (release packaging + release docs completed)
+- Last 4 plans: 06-01, 06-02, 06-03, 06-04
+- Trend: Stable (release gaps closed and packaging trust restored)
 
 *Updated after each plan completion*
 
@@ -67,7 +67,7 @@ Recent decisions affecting current work:
 - Phase 6 release artifact baseline fixed to `bash scripts/build-release-bundle.sh --version vX.Y.Z` producing one Apple Silicon `.zip` for shared-cloud distribution
 - Phase 6 release docs baseline fixed to `README.md` as the canonical first-run path plus `docs/RELEASE.md` and `docs/RELEASE_CHECKLIST.md`
 - Phase 6 QA baseline fixed to `bash scripts/verify-release-readiness.sh` plus archive audit enforcement
-- Phase 6 verification passed with 3/3 must-haves satisfied (`.planning/phases/06-distribution-release-readiness/06-VERIFICATION.md`)
+- Phase 6 verification passed with 5/5 must-haves satisfied after gap closure (`.planning/phases/06-distribution-release-readiness/06-VERIFICATION.md`)
 - Phase 6 gap closure fixed installer/docs `.env` sequencing so placeholder release templates no longer contradict the installer contract
 - Phase 6 gap closure fixed release packaging to require committed release inputs and committed runtime entrypoints (`main.py`, `manual_login.py`)
 
