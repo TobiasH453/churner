@@ -8,24 +8,24 @@ Do not paste secrets into terminal prompts. Edit `.env` directly.
 
 Run these commands from the repository root.
 
-1. Copy template:
+1. Run installer/bootstrap first:
 
 ```bash
-cp .env.example .env
+bash install.sh
 ```
 
-2. Edit `.env` manually and replace placeholders.
+If `.env` is missing, installer creates it from `.env.example`. If placeholders are still present, installer ends with `Env Validation PENDING`.
 
-3. Validate keys and formats:
+2. Edit `.env` manually and replace placeholders.
 
 ```bash
 bash scripts/validate-env.sh
 ```
 
-4. Continue installer/runtime flow:
+3. Continue runtime flow only after validation passes:
 
 ```bash
-bash install.sh
+bash scripts/services-up.sh
 ```
 
 ## Required key groups

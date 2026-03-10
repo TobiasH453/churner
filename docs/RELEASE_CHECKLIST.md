@@ -38,7 +38,14 @@ bash install.sh
 Expected cues:
 - preflight pass/fail output
 - bootstrap summary
+- `Env Validation PASS`, `PENDING`, or `FAIL`
 - next command guidance
+
+- [ ] If install ended with `Env Validation PENDING`, `.env` was edited locally and validation then passed:
+
+```bash
+bash scripts/validate-env.sh
+```
 
 ### Run
 

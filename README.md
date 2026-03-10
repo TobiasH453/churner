@@ -57,7 +57,11 @@ bash install.sh
 Expected outcome:
 - deterministic preflight output
 - bootstrap summary
-- next command guidance
+- `.env` created from `.env.example` if missing
+- `Env Validation PASS`, `PENDING`, or `FAIL` in the installer summary
+- next command guidance based on that result
+
+If the shipped placeholder `.env` is still in place, the installer ends with `Env Validation PENDING` and tells you to edit `.env` before starting services.
 
 ### 2) Fill local environment values and validate
 

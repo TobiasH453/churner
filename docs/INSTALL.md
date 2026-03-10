@@ -59,24 +59,48 @@ Press Enter after completing this step to continue...
 Bootstrap currently performs safe local setup steps:
 - Creates `logs/` and `data/` directories if missing
 - Creates `.env` from `.env.example` when possible
-- Runs `scripts/validate-env.sh` when available
+- Runs `scripts/validate-env.sh --allow-template-placeholders` when available
 
 No secret values are printed by installer output.
 
-## 5) End-of-install handoff
+## 5) Env validation handoff
+
+The installer summary is authoritative:
+
+- `Env Validation PASS`: `.env` is filled well enough to continue to service startup.
+- `Env Validation PENDING`: `.env` still contains the shipped placeholder values. Edit `.env` locally, then run `bash scripts/validate-env.sh`.
+- `Env Validation FAIL`: `.env` contains real values that are incomplete or malformed. Fix `.env`, then run `bash scripts/validate-env.sh`.
+
+Canonical first-run order:
+
+```bash
+bash install.sh
+bash scripts/validate-env.sh
+bash scripts/services-up.sh
+```
+
+The second command is only expected after you have edited `.env` locally.
+
+## 6) End-of-install handoff
 
 At the end of install, the script prints:
 - `Done` checklist
 - `Remaining` checklist
-- `Next command` (service startup)
+- `Next command` based on env validation state
 
-Current runtime handoff command:
+When the installer ends with `Env Validation PENDING` or `FAIL`, the next command is:
+
+```bash
+bash scripts/validate-env.sh
+```
+
+When the installer ends with `Env Validation PASS`, the next command is:
 
 ```bash
 bash scripts/services-up.sh
 ```
 
-Then run readiness self-check:
+After services are up, optional deeper install contract replay:
 
 ```bash
 bash scripts/installer-self-check.sh
@@ -93,7 +117,7 @@ If self-check fails, fix reported blockers and rerun:
 bash scripts/installer-self-check.sh
 ```
 
-## 6) Runtime validation handoff
+## 7) Runtime validation handoff
 
 After self-check passes, run runtime validation in this order:
 
@@ -111,7 +135,7 @@ If runtime validation fails:
 - Refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow
 - Use `docs/TROUBLESHOOTING.md` for consolidated recovery paths (install/runtime/n8n/smoke)
 
-## 7) n8n integration handoff
+## 8) n8n integration handoff
 
 After runtime validation passes, continue directly to n8n workflow setup:
 
@@ -128,7 +152,7 @@ Expected verification cue before/after import:
 
 - `[PASS] n8n workflow contract verification passed.`
 
-## 8) Smoke verification handoff
+## 9) Smoke verification handoff
 
 After runtime and n8n contract verification pass, run smoke verification:
 
