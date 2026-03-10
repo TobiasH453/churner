@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-17)
+See: .planning/PROJECT.md (updated 2026-03-10)
 
 **Core value:** A new Mac user can install and run the workflow locally in under 20 minutes, with both order-confirmation and shipping-confirmation paths working end-to-end.
-**Current focus:** Milestone complete - ready for audit
+**Current focus:** Phase 6 gap closure executed; ready for final verification and audit rerun
 
 ## Current Position
 
 Phase: 6 of 6 (Distribution & Release Readiness)
-Plan: 2 of 2 in current phase
-Status: All roadmap phases complete and verified; ready for milestone audit
-Last activity: 2026-03-10 — Completed Phase 6 execution and verification (`06-01`, `06-02`, `06-VERIFICATION.md`)
+Plan: 4 of 4 in current phase
+Status: All roadmap phases complete; Phase 6 audit blockers addressed and awaiting final verification
+Last activity: 2026-03-10 - Executed Phase 6 gap-closure work for release flow alignment and committed-source packaging
 
 Progress: [██████████] 100%
 
@@ -68,17 +68,19 @@ Recent decisions affecting current work:
 - Phase 6 release docs baseline fixed to `README.md` as the canonical first-run path plus `docs/RELEASE.md` and `docs/RELEASE_CHECKLIST.md`
 - Phase 6 QA baseline fixed to `bash scripts/verify-release-readiness.sh` plus archive audit enforcement
 - Phase 6 verification passed with 3/3 must-haves satisfied (`.planning/phases/06-distribution-release-readiness/06-VERIFICATION.md`)
+- Phase 6 gap closure fixed installer/docs `.env` sequencing so placeholder release templates no longer contradict the installer contract
+- Phase 6 gap closure fixed release packaging to require committed release inputs and committed runtime entrypoints (`main.py`, `manual_login.py`)
 
 ### Pending Todos
 
-- Run milestone audit / optional manual acceptance pass.
+- Rerun Phase 6 verification and milestone audit after gap closure.
 
 ### Blockers/Concerns
 
-None yet.
+None currently; final verification and milestone audit rerun are the remaining gates.
 
 ## Session Continuity
 
 Last session: 2026-03-10 13:33 PST
-Stopped at: Phase 6 complete and verified; next command `/prompts:gsd-audit-milestone`
+Stopped at: Phase 6 audit gap closure in progress; next commands are final verification and milestone audit rerun
 Resume file: None

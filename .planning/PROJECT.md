@@ -19,15 +19,18 @@ A new Mac user can install and run the workflow locally in under 20 minutes, wit
 - ✓ Run local operations through PM2-managed services (`amazon-agent`, `n8n-server`) with health/status scripts — existing
 - ✓ Maintain operational runbook and contract-style regression checks for fragile automation logic — existing
 
-### Active
+### Delivered in v1
 
-- [ ] Ship a one-step local installer flow (`install.sh`) suitable for semi-technical users on macOS
-- [ ] Optionally support one-command bootstrap in addition to `install.sh` for faster onboarding
-- [ ] Include importable n8n workflow artifact(s) and a clear setup guide for n8n integration
-- [ ] Add secure secrets/bootstrap flow (template + validation) without exposing secret values
-- [ ] Provide a downloadable distribution format with clear installation and usage instructions
-- [ ] Provide one smoke-test command that verifies health + order confirmation path + shipping confirmation path
-- [ ] Provide troubleshooting documentation and a diagnostics collection script for support cases
+- [x] Ship a one-step local installer flow (`install.sh`) suitable for semi-technical users on macOS
+- [x] Include importable n8n workflow artifact(s) and a clear setup guide for n8n integration
+- [x] Add secure secrets/bootstrap flow (template + validation) without exposing secret values
+- [x] Provide a downloadable distribution format with clear installation and usage instructions
+- [x] Provide one smoke-test command that verifies health + order confirmation path + shipping confirmation path
+- [x] Provide troubleshooting documentation and a diagnostics collection script for support cases
+
+### Deferred Beyond v1
+
+- Optional one-command bootstrap in addition to `install.sh` for faster onboarding
 
 ### Out of Scope
 
@@ -55,13 +58,13 @@ The current milestone is not feature invention; it is productization and distrib
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Product name is `1step_cashouts` | Aligns project identity with one-step shipping goal | — Pending |
-| v1 packaging prioritizes one-step local installer | Lowest cognitive overhead for non-technical users | — Pending |
-| Keep optional one-command bootstrap as secondary path | Helpful acceleration without replacing primary guided flow | — Pending |
-| Include importable n8n workflow + guide (not auto-import) | Easier and lower-risk than brittle automation of n8n UI/import paths | — Pending |
-| Enforce strict secret handling baseline | User explicitly prioritized secure shipping posture | — Pending |
-| Provide smoke test + troubleshooting docs + diagnostics script in v1 | Required for supportability and confidence after install | — Pending |
-| Confirm explicit v1 exclusions (no Linux/Windows, no Docker, no full auth bypass) | Prevents scope creep and protects timeline | — Pending |
+| Product name is `1step_cashouts` | Aligns project identity with one-step shipping goal | Accepted and shipped |
+| v1 packaging prioritizes one-step local installer | Lowest cognitive overhead for non-technical users | Accepted and shipped via `install.sh` |
+| Keep optional one-command bootstrap as secondary path | Helpful acceleration without replacing primary guided flow | Deferred beyond v1 |
+| Include importable n8n workflow + guide (not auto-import) | Easier and lower-risk than brittle automation of n8n UI/import paths | Accepted and shipped |
+| Enforce strict secret handling baseline | User explicitly prioritized secure shipping posture | Accepted and shipped |
+| Provide smoke test + troubleshooting docs + diagnostics script in v1 | Required for supportability and confidence after install | Accepted and shipped |
+| Confirm explicit v1 exclusions (no Linux/Windows, no Docker, no full auth bypass) | Prevents scope creep and protects timeline | Accepted and preserved |
 
 ---
-*Last updated: 2026-02-17 after initialization*
+*Last updated: 2026-03-10 after Phase 6 gap closure*

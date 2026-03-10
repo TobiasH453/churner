@@ -9,27 +9,27 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Installer & Onboarding
 
-- [ ] **INST-01**: Operator can run a single `install.sh` command that checks required macOS prerequisites before making changes.
-- [ ] **INST-02**: Operator can complete initial setup on a fresh Mac in 20 minutes or less using the documented default path.
-- [ ] **INST-03**: Operator can start all required services with one documented command path after installation.
+- [x] **INST-01**: Operator can run a single `install.sh` command that checks required macOS prerequisites before making changes.
+- [x] **INST-02**: Operator can complete initial setup on a fresh Mac in 20 minutes or less using the documented default path.
+- [x] **INST-03**: Operator can start all required services with one documented command path after installation.
 
 ### Security & Secrets
 
-- [ ] **SECR-01**: Operator can create local runtime config from a committed `.env.example` without exposing secret values in command output.
-- [ ] **SECR-02**: Operator can run a validator that confirms required secrets/config are present and plausibly formatted without printing secret contents.
-- [ ] **SECR-03**: Distributed package excludes browser profile/session state and secret-bearing files by default.
+- [x] **SECR-01**: Operator can create local runtime config from a committed `.env.example` without exposing secret values in command output.
+- [x] **SECR-02**: Operator can run a validator that confirms required secrets/config are present and plausibly formatted without printing secret contents.
+- [x] **SECR-03**: Distributed package excludes browser profile/session state and secret-bearing files by default.
 
 ### n8n Workflow Integration
 
-- [ ] **N8N-01**: Operator can import a versioned workflow JSON file from `n8n-workflows/` into n8n using documented steps.
-- [ ] **N8N-02**: Imported workflow sends payloads that match `/process-order` contract fields required by the API.
-- [ ] **N8N-03**: Operator can follow a guide that connects n8n workflow setup to API runtime setup end-to-end.
+- [x] **N8N-01**: Operator can import a versioned workflow JSON file from `n8n-workflows/` into n8n using documented steps.
+- [x] **N8N-02**: Imported workflow sends payloads that match `/process-order` contract fields required by the API.
+- [x] **N8N-03**: Operator can follow a guide that connects n8n workflow setup to API runtime setup end-to-end.
 
 ### Verification
 
-- [ ] **VER-01**: Operator can run one smoke-test command that verifies API health endpoint availability.
-- [ ] **VER-02**: Smoke test verifies the order-confirmation processing path produces a valid structured response contract.
-- [ ] **VER-03**: Smoke test verifies the shipping-confirmation processing path produces a valid structured response contract.
+- [x] **VER-01**: Operator can run one smoke-test command that verifies API health endpoint availability.
+- [x] **VER-02**: Smoke test verifies the order-confirmation processing path produces a valid structured response contract.
+- [x] **VER-03**: Smoke test verifies the shipping-confirmation processing path produces a valid structured response contract.
 
 ### Supportability
 
