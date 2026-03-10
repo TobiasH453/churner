@@ -2,6 +2,8 @@
 
 This is the canonical setup path for this repository.
 
+Copy repo first, general instructions on how to do so are in gitimport(general). I copied from a random guide so take it how you will.
+
 ## 1) Run the installer
 
 From the repository root:
