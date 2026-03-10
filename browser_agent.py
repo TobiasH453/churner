@@ -5,7 +5,6 @@ from models import (
     AgentResponse,
     OrderDetails,
     ShippingDetails,
-    EBDealResult,
     EBTrackingResult,
 )
 from amazon_scraper import AmazonScraper
@@ -14,7 +13,8 @@ from utils import logger
 
 class BrowserAgent:
     def __init__(self):
-        self.amazon_scraper = AmazonScraper()
+        self.amazon_personal_scraper = AmazonScraper(account_type="amz_personal")
+        self.amazon_business_scraper = AmazonScraper(account_type="amz_business")
         self.eb_agent = ElectronicsBuyerAgent()
 
     @staticmethod
@@ -51,6 +51,23 @@ class BrowserAgent:
             return False
         return "skipped eb task" in message.lower()
 
+    def _select_amazon_scraper(self, email_data: EmailData) -> AmazonScraper:
+        raw_account_type = getattr(email_data, "account_type", None)
+        normalized = raw_account_type.strip().lower() if isinstance(raw_account_type, str) else ""
+
+        if normalized == "amz_business":
+            return self.amazon_business_scraper
+
+        if normalized not in {"", "amz_personal"}:
+            logger.warning(
+                "Unknown account_type=%r; defaulting to personal scraper.",
+                raw_account_type,
+            )
+        elif normalized == "":
+            logger.warning("Missing account_type; defaulting to personal scraper.")
+
+        return self.amazon_personal_scraper
+
     async def process_email(self, email_data: EmailData) -> AgentResponse:
         """
         Main orchestration function
@@ -61,39 +78,26 @@ class BrowserAgent:
 
         try:
             logger.info(f"Processing {email_data.email_type} for order: {email_data.order_number}")
+            amazon_scraper = self._select_amazon_scraper(email_data)
 
             amazon_data: OrderDetails | ShippingDetails | None = None
-            eb_result: EBDealResult | EBTrackingResult | None = None
+            eb_result: EBTrackingResult | None = None
 
             # Route based on email type
             if email_data.email_type == "order_confirmation":
                 # Step 1: Scrape Amazon invoice page
                 logger.info("Step 1: Scraping Amazon invoice...")
-                amazon_data = await self.amazon_scraper.scrape_order_confirmation(
+                amazon_data = await amazon_scraper.scrape_order_confirmation(
                     email_data.order_number
                 )
 
-                # Step 2: Submit deal to electronicsbuyer.gg
-                logger.info("Step 2: Submitting deal to ElectronicsBuyer...")
-                try:
-                    quantities = {item['name']: item['quantity'] for item in amazon_data.items}
-                    eb_result = await self.eb_agent.submit_deal(
-                        items=[item['name'] for item in amazon_data.items],
-                        quantities=quantities
-                    )
-                except Exception as eb_exc:
-                    logger.error("ElectronicsBuyer deal submission failed: %s", eb_exc, exc_info=True)
-                    eb_result = EBDealResult(
-                        success=False,
-                        deal_id=None,
-                        payout_value=0.0,
-                        error_message=str(eb_exc),
-                    )
-                    errors.append(str(eb_exc))
+                # Step 2: Deal submission intentionally disabled.
+                logger.info("Step 2: Skipping ElectronicsBuyer deal submission for order confirmations.")
+                eb_result = None
             elif email_data.email_type == "shipping_confirmation":
                 # Step 1: Scrape Amazon tracking page
                 logger.info("Step 1: Scraping Amazon tracking...")
-                amazon_data = await self.amazon_scraper.scrape_shipping_confirmation(
+                amazon_data = await amazon_scraper.scrape_shipping_confirmation(
                     email_data.order_number
                 )
 

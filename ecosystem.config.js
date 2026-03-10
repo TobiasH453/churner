@@ -1,4 +1,14 @@
+const fs = require("fs");
 const path = require("path");
+
+function firstExisting(candidates) {
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
 
 const repoRoot = __dirname;
 const repoSlug = path
@@ -7,7 +17,12 @@ const repoSlug = path
   .replace(/[^a-z0-9]+/g, "-")
   .replace(/^-+|-+$/g, "") || "repo";
 
-const pythonBin = process.env.PYTHON_BIN || path.join(repoRoot, "venv314/bin/python");
+const pythonBin = process.env.PYTHON_BIN || firstExisting([
+  path.join(repoRoot, "venv/bin/python"),
+  path.join(repoRoot, "venv314/bin/python"),
+  path.join(repoRoot, "venv313/bin/python"),
+  path.join(repoRoot, "venv312/bin/python"),
+]) || "python3";
 const n8nBin = process.env.N8N_BIN || "n8n";
 const amazonAgentName = process.env.AMAZON_AGENT_PM2_NAME || `amazon-agent-${repoSlug}`;
 const n8nName = process.env.N8N_PM2_NAME || `n8n-server-${repoSlug}`;

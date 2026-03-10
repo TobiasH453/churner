@@ -26,12 +26,62 @@ os.environ.setdefault('TIMEOUT_BrowserStartEvent', '120')
 os.environ.setdefault('TIMEOUT_BrowserLaunchEvent', '120')
 os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
 
-# Path to persistent browser profile directory
-USER_DATA_DIR = "./data/browser-profile"
+# Paths to persistent browser profile directories
+PERSONAL_USER_DATA_DIR = "./data/browser-profile-personal"
+BUSINESS_USER_DATA_DIR = "./data/browser-profile-business"
 
 class AmazonScraper:
-    def __init__(self):
+    KNOWN_ORDER_QUANTITY_SELECTORS = [
+        "#orderDetails > div > div.a-cardui > div > div:nth-child(1) > div:nth-child(7) > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div > div > div:nth-child(1) > div > div > div > div",
+        "#orderDetails [aria-label*='quantity' i]",
+        "#orderDetails select[name*='quantity' i]",
+        "#orderDetails input[name*='quantity' i]",
+    ]
+    ORDER_DETAILS_ITEM_TITLE_SELECTOR_TEMPLATES = [
+        "#orderDetails > div > div.a-cardui > div > div:nth-child(1) > div:nth-child(8) > div > div > div > div > div > div > div:nth-child(1) > div > div:nth-child({row}) > div > div > div > div:nth-child(2) > div > div:nth-child(1)",
+        "#orderDetails > div > div.a-cardui > div > div:nth-child(1) > div:nth-child(7) > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child({row}) > div > div:nth-child(2) > div > div:nth-child(1)",
+    ]
+    ORDER_DETAILS_ITEM_QUANTITY_SELECTOR_TEMPLATES = [
+        "#orderDetails > div > div.a-cardui > div > div:nth-child(1) > div:nth-child(7) > div > div > div > div > div > div > div > div > div:nth-child(2) > div > div:nth-child({row}) > div > div:nth-child(1) > div > div > div > div",
+    ]
+    ORDER_DETAILS_ROW_LOCAL_QUANTITY_SELECTORS = [
+        ".od-item-view-qty span",
+        ".od-item-view-qty",
+    ]
+    ORDER_DETAILS_ITEM_BLOCKED_TERMS = (
+        "buy it again",
+        "recommended",
+        "sponsored",
+        "customers also",
+        "inspired by",
+        "related to",
+        "browsing history",
+        "view history",
+        "your recommendations",
+        "search",
+        "typical:",
+        "/count",
+    )
+
+    def __init__(self, account_type: str = "amz_personal"):
         ensure_browser_runtime_compatibility()
+        normalized_account_type = str(account_type or "amz_personal").strip().lower()
+        if normalized_account_type not in {"amz_personal", "amz_business"}:
+            normalized_account_type = "amz_personal"
+        self.account_type = normalized_account_type
+        self.account_label = "business" if self.account_type == "amz_business" else "personal"
+
+        if self.account_type == "amz_business":
+            self.user_data_dir = BUSINESS_USER_DATA_DIR
+            email_env = "AMAZON_BUSINESS_EMAIL"
+            password_env = "AMAZON_BUSINESS_PASSWORD"
+            totp_env = "AMAZON_BUSINESS_TOTP_SECRET"
+        else:
+            self.user_data_dir = PERSONAL_USER_DATA_DIR
+            email_env = "AMAZON_EMAIL"
+            password_env = "AMAZON_PASSWORD"
+            totp_env = "AMAZON_TOTP_SECRET"
+
         # Use browser-use native ChatAnthropic implementation for structured output compatibility.
         self.llm = ChatAnthropic(
             model='claude-sonnet-4-5-20250929',
@@ -40,9 +90,9 @@ class AmazonScraper:
             timeout=60,
             max_retries=10,
         )
-        self.amazon_email = get_env('AMAZON_EMAIL', '')
-        self.amazon_password = get_env('AMAZON_PASSWORD', '')
-        self.amazon_totp_secret = get_env('AMAZON_TOTP_SECRET', '').replace(' ', '')
+        self.amazon_email = get_env(email_env, '')
+        self.amazon_password = get_env(password_env, '')
+        self.amazon_totp_secret = get_env(totp_env, '').replace(' ', '')
 
     async def _selector_exists(self, page: Page, selector: str) -> bool:
         return await page.locator(selector).count() > 0
@@ -252,14 +302,18 @@ class AmazonScraper:
         This removes login responsibilities from the LLM agent.
         """
         if not self.amazon_email or not self.amazon_password:
-            raise RuntimeError("Missing AMAZON_EMAIL or AMAZON_PASSWORD for session priming.")
+            if self.account_type == "amz_business":
+                raise RuntimeError(
+                    "Missing AMAZON_BUSINESS_EMAIL or AMAZON_BUSINESS_PASSWORD for business session priming."
+                )
+            raise RuntimeError("Missing AMAZON_EMAIL or AMAZON_PASSWORD for personal session priming.")
 
         logger.info(f"Priming Amazon session for target URL: {target_url}")
         chromium_path = get_chromium_executable()
 
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
-                user_data_dir=USER_DATA_DIR,
+                user_data_dir=self.user_data_dir,
                 headless=False,
                 executable_path=chromium_path,
                 args=STEALTH_BROWSER_ARGS,
@@ -420,17 +474,83 @@ class AmazonScraper:
         return "Unknown"
 
     @staticmethod
+    def _extract_tba_tracking_number(text: str) -> str | None:
+        if not text or not isinstance(text, str):
+            return None
+        match = re.search(r"\bTBA[\s\-]*([0-9A-Z][0-9A-Z\-\s]{6,30})\b", text, flags=re.IGNORECASE)
+        if not match:
+            return None
+        suffix = re.sub(r"[^A-Z0-9]", "", match.group(1).upper())
+        if len(suffix) < 6:
+            return None
+        return f"TBA{suffix}"
+
+    @staticmethod
     def _extract_tracking_number(text: str) -> str | None:
+        if not text or not isinstance(text, str):
+            return None
+
+        def _normalize_candidate(raw: str) -> str | None:
+            candidate = re.sub(r"[^A-Z0-9]", "", (raw or "").upper())
+            if len(candidate) < 8 or len(candidate) > 34:
+                return None
+            digit_count = sum(ch.isdigit() for ch in candidate)
+            if digit_count < 3:
+                return None
+            if re.fullmatch(r"(\d)\1{7,}", candidate):
+                return None
+            return candidate
+
         patterns = [
             r"\b1Z[0-9A-Z]{16}\b",       # UPS
-            r"\bTBA[0-9A-Z]{8,}\b",      # Amazon Logistics
+            r"\bTBA[0-9A-Z\-]{8,}\b",    # Amazon Logistics
+            r"\b[A-Z]{2}[0-9]{9}[A-Z]{2}\b",  # USPS international-style
             r"\b9[0-9]{21,23}\b",        # USPS style
             r"\b[0-9]{12,22}\b",         # Generic numeric carriers
         ]
         for pattern in patterns:
             match = re.search(pattern, text, flags=re.IGNORECASE)
             if match:
-                return match.group(0)
+                normalized = _normalize_candidate(match.group(0))
+                if normalized:
+                    return normalized
+
+        label_patterns = [
+            r"(?:tracking(?:\s*(?:number|id|#))?|shipment(?:\s*(?:id|#))?)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\s]{7,40})",
+        ]
+        for pattern in label_patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                normalized = _normalize_candidate(match.group(1))
+                if normalized:
+                    return normalized
+
+        for token in re.findall(r"\b[A-Z0-9][A-Z0-9\-]{7,34}\b", text.upper()):
+            normalized = _normalize_candidate(token)
+            if normalized:
+                return normalized
+
+        return None
+
+    async def _extract_tracking_from_progress_tracker_card(self, page: Page) -> str | None:
+        selectors = [
+            "#pt-page-container-inner > div.a-row.pt-main-container > div.pt-map-outer-container.pt-map-type-static > div.pt-floating-map-card > section.pt-card.delivery-card > div > div:nth-child(1) > div",
+            "#pt-page-container-inner section.pt-card.delivery-card",
+            "section.pt-card.delivery-card",
+        ]
+        for selector in selectors:
+            try:
+                loc = page.locator(selector)
+                count = min(await loc.count(), 8)
+                for i in range(count):
+                    node = loc.nth(i)
+                    if not await node.is_visible():
+                        continue
+                    text = await node.inner_text()
+                    tba = self._extract_tba_tracking_number(text)
+                    if tba:
+                        return tba
+            except Exception:
+                continue
         return None
 
     @staticmethod
@@ -445,6 +565,52 @@ class AmazonScraper:
             if match:
                 return match.group(1).strip()
         return None
+
+    @staticmethod
+    def _normalize_shipping_delivery_date(raw_date: str | None) -> str | None:
+        if not raw_date or not isinstance(raw_date, str):
+            return None
+
+        cleaned = re.sub(r"\s+", " ", raw_date).strip(" ,")
+        if not cleaned:
+            return None
+
+        cleaned = re.sub(
+            r"^(?:arriving|arrives|delivery by|expected by|delivered)\s+",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        ).strip(" ,")
+        if not cleaned:
+            return None
+
+        month_day_match = re.match(
+            (
+                r"^(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|"
+                r"Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+"
+                r"(\d{1,2})(?:st|nd|rd|th)?(?:,\s*\d{4})?$"
+            ),
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        if month_day_match:
+            month = month_day_match.group(1).rstrip(".")
+            day = int(month_day_match.group(2))
+            return f"{month} {day}"
+
+        weekday_with_number_match = re.match(
+            (
+                r"^(Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:r(?:s(?:day)?)?)?|"
+                r"Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)(?:,)?\s+\d{1,2}(?:st|nd|rd|th)?"
+                r"(?:,\s*\d{4})?$"
+            ),
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        if weekday_with_number_match:
+            return weekday_with_number_match.group(1)
+
+        return cleaned
 
     @staticmethod
     def _normalize_money(value: str) -> str:
@@ -520,117 +686,399 @@ class AmazonScraper:
 
         return 0.0
 
+    @staticmethod
+    def _parse_quantity_from_text(text: str) -> int | None:
+        source = (text or "").strip()
+        if not source:
+            return None
+        if re.fullmatch(r"\d{1,2}", source):
+            qty = int(source)
+            if 0 < qty < 100:
+                return qty
+
+        patterns = [
+            r"(?:qty|quantity)\s*[:x]?\s*(\d{1,2})\b",
+            r"\b(\d{1,2})\s*x\b",
+            r"\b(\d{1,2})\s+of\b",
+            r"\b(\d{1,2})\s+(?:items?|units?)\b",
+            r"(?:quantity|qty)\s*of\s*(\d{1,2})\b",
+        ]
+        matches: list[int] = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+                try:
+                    qty = int(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+                if 0 < qty < 100:
+                    matches.append(qty)
+        return max(matches) if matches else None
+
+    async def _extract_quantity_hints(self, page: Page) -> list[int]:
+        hints: list[int] = []
+        seen: set[int] = set()
+
+        def add_hint(value: int | None) -> None:
+            if value is None:
+                return
+            if value <= 0 or value >= 100:
+                return
+            if value in seen:
+                return
+            seen.add(value)
+            hints.append(value)
+
+        for selector in self.KNOWN_ORDER_QUANTITY_SELECTORS:
+            try:
+                loc = page.locator(selector)
+                count = await loc.count()
+                if count == 0:
+                    continue
+                for i in range(min(count, 8)):
+                    node = loc.nth(i)
+                    samples: list[str] = []
+                    try:
+                        samples.append(" ".join((await node.inner_text()).split()))
+                    except Exception:
+                        pass
+                    try:
+                        payload = await node.evaluate(
+                            """
+                            (el) => {
+                              const selected = (el.tagName === 'SELECT' && el.selectedOptions && el.selectedOptions.length)
+                                ? Array.from(el.selectedOptions).map((o) => (o.textContent || o.value || '')).join(' ')
+                                : '';
+                              const value = (typeof el.value === 'string') ? el.value : '';
+                              return [
+                                selected,
+                                value,
+                                el.getAttribute('value') || '',
+                                el.getAttribute('aria-label') || '',
+                                el.getAttribute('title') || '',
+                                el.textContent || '',
+                                (el.querySelector("select[name*='quantity' i], input[name*='quantity' i], option[selected]") || {}).value || '',
+                                (el.querySelector("select[name*='quantity' i], input[name*='quantity' i], option[selected]") || {}).textContent || '',
+                              ].join(' ');
+                            }
+                            """
+                        )
+                        if isinstance(payload, str):
+                            samples.append(payload)
+                    except Exception:
+                        pass
+
+                    for sample in samples:
+                        qty = self._parse_quantity_from_text(sample)
+                        add_hint(qty)
+
+            except Exception:
+                continue
+
+        # Global quantity hints across the order details module.
+        try:
+            payload = await page.evaluate(
+                """
+                () => {
+                  const selectors = [
+                    "#orderDetails [aria-label*='quantity' i]",
+                    "#orderDetails select[name*='quantity' i]",
+                    "#orderDetails input[name*='quantity' i]",
+                    "#orderDetails option[selected]",
+                    "#orderDetails .a-dropdown-prompt",
+                  ];
+                  const chunks = [];
+                  for (const selector of selectors) {
+                    document.querySelectorAll(selector).forEach((el) => {
+                      chunks.push(
+                        [
+                          el.value || '',
+                          el.getAttribute('value') || '',
+                          el.getAttribute('aria-label') || '',
+                          el.getAttribute('title') || '',
+                          el.textContent || '',
+                        ].join(' ')
+                      );
+                    });
+                  }
+                  return chunks;
+                }
+                """
+            )
+            if isinstance(payload, list):
+                for chunk in payload:
+                    if isinstance(chunk, str):
+                        add_hint(self._parse_quantity_from_text(chunk))
+        except Exception:
+            pass
+
+        # Textual quantity hints rendered as plain labels (Qty/Quantity) near order rows.
+        try:
+            payload = await page.evaluate(
+                """
+                () => {
+                  const chunks = [];
+                  const nodes = document.querySelectorAll("#orderDetails div, #orderDetails span, #orderDetails li, #orderDetails p");
+                  for (const node of nodes) {
+                    const text = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+                    if (!text || text.length > 140) continue;
+                    const lower = text.toLowerCase();
+                    if (
+                      lower.includes('qty') ||
+                      lower.includes('quantity') ||
+                      /\\b\\d{1,2}\\s+of\\b/i.test(text)
+                    ) {
+                      chunks.push(text);
+                    }
+                  }
+                  return chunks.slice(0, 400);
+                }
+                """
+            )
+            if isinstance(payload, list):
+                for chunk in payload:
+                    if isinstance(chunk, str):
+                        add_hint(self._parse_quantity_from_text(chunk))
+        except Exception:
+            pass
+
+        if hints:
+            logger.info("Amazon quantity hints detected: %s", hints)
+        return hints
+
+    async def _apply_quantity_hints(self, page: Page, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not items:
+            return items
+        if any(int(item.get("quantity", 1)) > 1 for item in items):
+            return items
+
+        hints = await self._extract_quantity_hints(page)
+        if not hints:
+            return items
+
+        normalized_hints = [h for h in hints if h > 1]
+        if not normalized_hints:
+            return items
+
+        patched = [dict(item) for item in items]
+        if len(normalized_hints) == 1:
+            for item in patched:
+                item["quantity"] = normalized_hints[0]
+            return patched
+
+        if len(normalized_hints) >= len(patched):
+            for i, item in enumerate(patched):
+                item["quantity"] = normalized_hints[i]
+            return patched
+
+        if len(set(normalized_hints)) == 1:
+            for item in patched:
+                item["quantity"] = normalized_hints[0]
+            return patched
+
+        # If hints are mixed but we can't map confidently, use strongest repeated hint.
+        freq: dict[int, int] = {}
+        for hint in normalized_hints:
+            freq[hint] = freq.get(hint, 0) + 1
+        most_common = sorted(freq.items(), key=lambda kv: (kv[1], kv[0]), reverse=True)[0][0]
+        if most_common > 1:
+            for item in patched:
+                item["quantity"] = most_common
+            return patched
+
+        return patched
+
     async def _extract_items_from_order_page(self, page: Page, order_number: str) -> list[dict]:
         """
-        Best-effort item extraction from order details page.
-        Prioritizes product links inside shipment/order containers and
-        aggressively filters recommendation/noise text.
+        Strict item extraction from the order details shipment rows only.
+        This intentionally avoids global product link scans to prevent recommendation leakage.
         """
-        # Try extracting from nearest shipment container around "Track package" first.
-        extracted = await page.evaluate(
+        extraction_payload = await page.evaluate(
             """
-            (orderNumber) => {
-              const bad = [
-                'buy it again',
-                'recommended',
-                'sponsored',
-                'customers also',
-                'inspired by',
-                'related to',
-                'search',
-                'order details',
-              ];
-
-              const clean = (s) => (s || '')
-                .replace(/\\s+/g, ' ')
+            (config) => {
+              const collapse = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              const cleanTitle = (s) => collapse((s || '')
                 .replace(/\\$\\s*\\d+[\\d,]*(?:\\.\\d{2})?/g, ' ')
                 .replace(/\\(\\$\\s*\\d+[\\d,]*(?:\\.\\d{2})?(?:\\/count)?\\)/gi, ' ')
                 .replace(/\\bQty\\s*:?\\s*\\d+\\b/gi, ' ')
-                .trim();
+              );
+              const blocked = new Set((config.blockedTerms || []).map((v) => String(v).toLowerCase()));
 
-              const isGood = (s) => {
-                const t = clean(s);
-                if (!t || t.length < 8) return false;
-                if (t.length > 180) return false;
-                const lower = t.toLowerCase();
-                if (bad.some((k) => lower.includes(k))) return false;
-                if (/[{}<>]/.test(t)) return false;
-                return true;
+              const isVisible = (el) => {
+                if (!el) return false;
+                try {
+                  if (el.offsetParent !== null) return true;
+                  return el.getClientRects().length > 0;
+                } catch {
+                  return false;
+                }
               };
 
-              const uniq = [];
-              const seen = new Set();
-
-              const add = (text) => {
-                const t = clean(text);
-                if (!isGood(t)) return;
-                const key = t.toLowerCase();
-                if (seen.has(key)) return;
-                seen.add(key);
-                uniq.push(t);
+              const firstVisibleBySelectors = (selectors) => {
+                for (const selector of selectors) {
+                  try {
+                    const el = document.querySelector(selector);
+                    if (isVisible(el)) return el;
+                  } catch {}
+                }
+                return null;
               };
 
-              const productLinkSelector = "a[href*='/dp/'], a[href*='/gp/product/']";
+              const parseQtyFromText = (text) => {
+                const source = collapse(text).toLowerCase();
+                if (!source) return 1;
+                if (/^x?\\s*\\d{1,2}$/.test(source)) {
+                  const digits = source.replace(/[^0-9]/g, '');
+                  const qty = parseInt(digits, 10);
+                  if (Number.isFinite(qty) && qty > 0 && qty < 100) return qty;
+                }
+                const patterns = [
+                  /(?:qty|quantity)\\s*[:x]?\\s*(\\d{1,2})\\b/i,
+                  /\\b(\\d{1,2})\\s*x\\b/i,
+                  /\\bx\\s*(\\d{1,2})\\b/i,
+                  /\\b(\\d{1,2})\\s+of\\b/i,
+                  /\\b(\\d{1,2})\\s+(?:items?|units?)\\b/i,
+                  /(?:quantity|qty)\\s*of\\s*(\\d{1,2})\\b/i,
+                ];
+                let best = 1;
+                for (const pattern of patterns) {
+                  const match = source.match(pattern);
+                  if (!match) continue;
+                  const qty = parseInt(match[1], 10);
+                  if (Number.isFinite(qty) && qty > 0 && qty < 100) best = Math.max(best, qty);
+                }
+                return best;
+              };
 
-              // First attempt: order-number container context.
-              const allNodes = Array.from(document.querySelectorAll('div, span, a, h1, h2, h3'));
-              const orderNode = allNodes.find((el) => (el.textContent || '').includes(orderNumber));
-              if (orderNode) {
-                let container = orderNode;
-                for (let i = 0; i < 10 && container && container.parentElement; i++) {
-                  container = container.parentElement;
-                  const links = container.querySelectorAll(productLinkSelector);
-                  if (links.length > 0) {
-                    links.forEach((a) => add(a.textContent || ''));
-                    if (uniq.length > 0) return uniq.slice(0, 10);
+              const makeSelectorsForRow = (templates, row) =>
+                (templates || []).map((tpl) => String(tpl).replace("{row}", String(row)));
+
+              const findRowLocalQuantity = (titleEl) => {
+                const selectors = config.rowLocalQuantitySelectors || [];
+                let node = titleEl;
+                for (let depth = 0; depth < 8 && node; depth += 1) {
+                  try {
+                    for (const selector of selectors) {
+                      const qtyEl = node.querySelector(selector);
+                      if (!isVisible(qtyEl)) continue;
+                      const qtyRaw = [
+                        qtyEl.textContent || "",
+                        qtyEl.getAttribute("aria-label") || "",
+                        qtyEl.getAttribute("title") || "",
+                        qtyEl.getAttribute("value") || "",
+                      ].join(" ");
+                      const qty = parseQtyFromText(qtyRaw);
+                      if (qty > 1) return qty;
+                    }
+                  } catch {}
+                  node = node.parentElement;
+                }
+                return null;
+              };
+
+              const results = [];
+              const seen = new Map();
+              let titleHits = 0;
+              const maxRows = Number(config.maxRows || 20);
+
+              for (let row = 1; row <= maxRows; row += 1) {
+                const titleEl = firstVisibleBySelectors(makeSelectorsForRow(config.titleTemplates, row));
+                if (!titleEl) continue;
+                titleHits += 1;
+
+                const rawTitle = cleanTitle(titleEl.textContent || '');
+                if (!rawTitle || rawTitle.length < 8 || rawTitle.length > 220) continue;
+                const lower = rawTitle.toLowerCase();
+                if ([...blocked].some((term) => lower.includes(term))) continue;
+
+                let quantity = 1;
+                const rowLocalQuantity = findRowLocalQuantity(titleEl);
+                if (typeof rowLocalQuantity === "number" && rowLocalQuantity > 0) {
+                  quantity = rowLocalQuantity;
+                } else {
+                  const qtyEl = firstVisibleBySelectors(makeSelectorsForRow(config.quantityTemplates, row));
+                  if (qtyEl) {
+                    const qtyRaw = [
+                      qtyEl.textContent || "",
+                      qtyEl.getAttribute("aria-label") || "",
+                      qtyEl.getAttribute("title") || "",
+                      qtyEl.getAttribute("value") || "",
+                    ].join(" ");
+                    quantity = Math.max(quantity, parseQtyFromText(qtyRaw));
+                  }
+
+                  let parent = titleEl;
+                  for (let i = 0; i < 4 && parent; i++) {
+                    quantity = Math.max(quantity, parseQtyFromText(parent.textContent || ""));
+                    parent = parent.parentElement;
                   }
                 }
-              }
 
-              // First attempt: around track-package controls (shipment context).
-              const trackControls = Array.from(document.querySelectorAll('a,button'))
-                .filter((el) => (el.textContent || '').toLowerCase().includes('track package'));
-
-              for (const control of trackControls) {
-                let container = control;
-                for (let i = 0; i < 8 && container && container.parentElement; i++) {
-                  container = container.parentElement;
-                  const links = container.querySelectorAll(productLinkSelector);
-                  if (links.length > 0) {
-                    links.forEach((a) => add(a.textContent || ''));
-                    if (uniq.length > 0) return uniq.slice(0, 10);
-                  }
+                const key = rawTitle.toLowerCase();
+                if (seen.has(key)) {
+                  const idx = seen.get(key);
+                  results[idx].quantity = Math.max(results[idx].quantity || 1, quantity);
+                  continue;
                 }
+
+                seen.set(key, results.length);
+                results.push({ name: rawTitle, quantity: Math.max(1, quantity) });
               }
 
-              // Second attempt: all product links, but filtered.
-              document.querySelectorAll(productLinkSelector).forEach((a) => add(a.textContent || ''));
-              return uniq.slice(0, 10);
+              return {
+                mode: "strict-order-details-rows",
+                rows_scanned: maxRows,
+                title_hits: titleHits,
+                items: results.slice(0, 10),
+              };
             }
             """,
-            order_number
+            {
+                "titleTemplates": self.ORDER_DETAILS_ITEM_TITLE_SELECTOR_TEMPLATES,
+                "quantityTemplates": self.ORDER_DETAILS_ITEM_QUANTITY_SELECTOR_TEMPLATES,
+                "rowLocalQuantitySelectors": self.ORDER_DETAILS_ROW_LOCAL_QUANTITY_SELECTORS,
+                "blockedTerms": list(self.ORDER_DETAILS_ITEM_BLOCKED_TERMS),
+                "maxRows": 20,
+            },
         )
 
+        extracted: list[dict[str, Any]] = []
+        mode = "strict-order-details-rows"
+        rows_scanned = 0
+        title_hits = 0
+        if isinstance(extraction_payload, dict):
+            mode = str(extraction_payload.get("mode") or "unknown")
+            rows_scanned = int(extraction_payload.get("rows_scanned") or 0)
+            title_hits = int(extraction_payload.get("title_hits") or 0)
+            items = extraction_payload.get("items")
+            if isinstance(items, list):
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name", "")).strip()
+                    if not name:
+                        continue
+                    try:
+                        quantity = int(item.get("quantity", 1))
+                    except (TypeError, ValueError):
+                        quantity = 1
+                    extracted.append({"name": name, "quantity": max(1, quantity)})
         if extracted:
-            return [{"name": name, "quantity": 1} for name in extracted]
+            logger.info(
+                "Amazon item extraction mode=%s accepted=%s rows_scanned=%s title_hits=%s",
+                mode,
+                len(extracted),
+                rows_scanned,
+                title_hits,
+            )
+            return extracted
 
-        # Final fallback: strict link-only extraction.
-        names: list[str] = []
-        loc = page.locator("a[href*='/dp/'], a[href*='/gp/product/']")
-        count = min(await loc.count(), 40)
-        for i in range(count):
-            text = " ".join((await loc.nth(i).inner_text()).split())
-            if len(text) < 8 or len(text) > 180:
-                continue
-            lower = text.lower()
-            if any(skip in lower for skip in ["buy it again", "recommended", "sponsored", "customers also", "search"]):
-                continue
-            if "$" in text:
-                continue
-            if text not in names:
-                names.append(text)
-
-        return [{"name": name, "quantity": 1} for name in names[:10]]
+        logger.warning(
+            "Amazon item extraction mode=%s found no strict order-details rows. rows_scanned=%s title_hits=%s",
+            mode,
+            rows_scanned,
+            title_hits,
+        )
+        return []
 
     async def _scrape_shipping_fallback(self, order_number: str) -> ShippingDetails:
         """
@@ -643,7 +1091,7 @@ class AmazonScraper:
 
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
-                user_data_dir=USER_DATA_DIR,
+                user_data_dir=self.user_data_dir,
                 headless=False,
                 executable_path=chromium_path,
                 args=STEALTH_BROWSER_ARGS,
@@ -654,14 +1102,33 @@ class AmazonScraper:
                 page = context.pages[0] if context.pages else await context.new_page()
                 await page.goto(order_details_url, wait_until="domcontentloaded")
                 await asyncio.sleep(2)
+                normalized_order_number = re.sub(r"\D", "", order_number or "")
+
+                def _accept_tracking(candidate: str | None) -> str | None:
+                    if not candidate:
+                        return None
+                    compact = re.sub(r"\D", "", candidate)
+                    if normalized_order_number and compact == normalized_order_number:
+                        logger.warning(
+                            "Discarded tracking candidate because it matched order number. candidate=%s order=%s",
+                            candidate,
+                            order_number,
+                        )
+                        return None
+                    return candidate
 
                 # Login in this same context if Amazon still prompts for auth.
                 await self._perform_sign_in_if_needed(page, order_details_url)
                 if await self._is_sign_in_page(page):
                     raise RuntimeError("Fallback scrape still on sign-in page after deterministic login attempt.")
 
-                # Extract items from order summary/order details context first.
+                # Extract items/tracking from order details context before possible page transition.
+                order_page_text = await page.locator("body").inner_text()
                 items = await self._extract_items_from_order_page(page, order_number)
+                tracking_number = _accept_tracking(
+                    self._extract_tba_tracking_number(order_page_text)
+                    or self._extract_tba_tracking_number(page.url)
+                )
 
                 await self._click_first(
                     page,
@@ -674,16 +1141,62 @@ class AmazonScraper:
                 await asyncio.sleep(2)
 
                 body_text = await page.locator("body").inner_text()
-                tracking_number = self._extract_tracking_number(body_text)
-                delivery_date = self._extract_delivery_date(body_text)
+                tracking_number = _accept_tracking(
+                    tracking_number
+                    or await self._extract_tracking_from_progress_tracker_card(page)
+                    or self._extract_tba_tracking_number(body_text)
+                    or self._extract_tba_tracking_number(page.url)
+                    or self._extract_tracking_number(body_text)
+                    or self._extract_tracking_number(page.url)
+                )
+                delivery_date = self._normalize_shipping_delivery_date(
+                    self._extract_delivery_date(body_text) or self._extract_delivery_date(order_page_text)
+                )
                 carrier = self._guess_carrier(body_text, tracking_number or "")
 
                 if not items:
                     # Retry item extraction after possible page transition.
                     items = await self._extract_items_from_order_page(page, order_number)
+                if not items:
+                    raise RuntimeError(
+                        "Strict item extraction found no order-details rows; refusing broad fallback."
+                    )
+
+                # Final recovery: hidden tracking tokens can exist in hrefs/HTML even when not visible in body text.
+                if not tracking_number:
+                    for _ in range(2):
+                        await asyncio.sleep(1)
+                        refreshed_text = await page.locator("body").inner_text()
+                        tracking_number = _accept_tracking(
+                            await self._extract_tracking_from_progress_tracker_card(page)
+                            or self._extract_tba_tracking_number(refreshed_text)
+                            or self._extract_tba_tracking_number(page.url)
+                            or self._extract_tracking_number(refreshed_text)
+                            or self._extract_tracking_number(page.url)
+                        )
+                        if tracking_number:
+                            body_text = refreshed_text
+                            break
 
                 if not tracking_number:
-                    raise RuntimeError("Fallback scrape could not find a tracking number on the order page.")
+                    try:
+                        html_text = await page.content()
+                    except Exception:
+                        html_text = ""
+                    tracking_number = _accept_tracking(
+                        self._extract_tba_tracking_number(html_text)
+                        or self._extract_tba_tracking_number(body_text)
+                        or self._extract_tba_tracking_number(order_page_text)
+                        or
+                        self._extract_tracking_number(html_text)
+                        or self._extract_tracking_number(body_text)
+                        or self._extract_tracking_number(order_page_text)
+                    )
+
+                if not tracking_number:
+                    raise RuntimeError(
+                        "Fallback scrape could not find a tracking number after multi-source extraction."
+                    )
 
                 return ShippingDetails(
                     tracking_number=tracking_number,
@@ -698,14 +1211,28 @@ class AmazonScraper:
         """
         Deterministic Playwright extraction for order confirmation/invoice details.
         """
-        invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
+        if self.account_type == "amz_business":
+            invoice_url = (
+                "https://www.amazon.com/your-orders/order-details"
+                f"?orderID={order_number}&ref=ab_ppx_yo_dt_b_fed_order_details"
+            )
+            invoice_url_kind = "business-order-details"
+        else:
+            invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
+            invoice_url_kind = "personal-legacy-print"
         chromium_path = get_chromium_executable()
 
-        logger.warning("Using deterministic fallback order scrape for order %s", order_number)
+        logger.warning(
+            "Using deterministic fallback order scrape for order %s account=%s url_kind=%s url=%s",
+            order_number,
+            self.account_type,
+            invoice_url_kind,
+            invoice_url,
+        )
 
         async with async_playwright() as p:
             context = await p.chromium.launch_persistent_context(
-                user_data_dir=USER_DATA_DIR,
+                user_data_dir=self.user_data_dir,
                 headless=False,
                 executable_path=chromium_path,
                 args=STEALTH_BROWSER_ARGS,
@@ -742,169 +1269,11 @@ class AmazonScraper:
         Navigate to Amazon invoice page and extract order details
         """
         logger.info(f"Scraping order confirmation for: {order_number}")
-
-        invoice_url = f"https://www.amazon.com/gp/css/summary/print.html?ie=UTF8&orderID={order_number}"
-
-        # Primary path: deterministic sign-in + extraction in one context.
-        try:
-            return await self._scrape_order_fallback(order_number)
-        except Exception as primary_exc:
-            logger.warning(
-                "Deterministic order scrape primary path failed: %r. Falling back to LLM extraction path.",
-                primary_exc,
-            )
-
-        # Secondary path: ensure login/session is ready before the LLM agent starts extracting.
-        await self._prime_amazon_session(invoice_url)
-
-        task = f"""
-        IMPORTANT: Session is already authenticated. Do NOT attempt login.
-        Look at the screenshot after every action. Do not return data until you can
-        actually see order information on the page.
-
-        Step 1: Navigate to {invoice_url}
-
-        Step 2: If sign-in page appears, navigate to {invoice_url} once more.
-        If sign-in still appears after retry, stop and do not fabricate data.
-
-        Step 3: You should now see the Amazon invoice page with order details. Extract:
-        - Items with quantities (e.g., "iPad 128GB Blue" x2)
-        - Subtotal (before cashback/discounts)
-        - Grand total (final amount charged)
-        - Cashback percentage (usually 5% or 6%, look for rewards/cashback text)
-        - Estimated delivery date
-
-        Only return structured data AFTER you can see the actual invoice page with items listed.
-        """
-
-        browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR)
-
-        agent = Agent(
-            task=task,
-            llm=self.llm,  # type: ignore[arg-type]
-            use_vision=True,
-            max_actions_per_step=5,
-            browser_profile=browser_profile,
-            output_model_schema=OrderDetails,
-            generate_gif='./logs/agent.gif',
-            save_conversation_path="./logs/agent_conversations",
-            max_failures=10,
-            max_steps=25,
-            step_timeout=180,
-        )
-
-        try:
-            result = await agent.run()
-            errors = [err for err in result.errors() if err]
-            if errors:
-                logger.warning(
-                    "LLM order scrape failed (last_error=%r). Trying deterministic fallback.",
-                    errors[-1],
-                )
-                try:
-                    return await self._scrape_order_fallback(order_number)
-                except Exception as fallback_exc:
-                    raise RuntimeError(
-                        f"Agent failed during order scrape. last_error={errors[-1]!r} "
-                        f"final_result={result.final_result()!r} fallback_error={fallback_exc!r}"
-                    ) from fallback_exc
-            structured = self._get_validated_structured_output(result, OrderDetails, f"order {order_number}")
-            if not structured.items:
-                logger.warning("LLM order scrape returned empty items. Trying deterministic fallback.")
-                try:
-                    return await self._scrape_order_fallback(order_number)
-                except Exception as fallback_exc:
-                    raise RuntimeError(
-                        f"Order scrape returned empty items and fallback failed: {fallback_exc!r}. "
-                        f"final_result={result.final_result()!r}"
-                    ) from fallback_exc
-            return structured
-        finally:
-            await agent.close()
+        return await self._scrape_order_fallback(order_number)
 
     async def scrape_shipping_confirmation(self, order_number: str) -> ShippingDetails:
         """
         Navigate to Amazon tracking page and extract shipping details
         """
         logger.info(f"Scraping shipping confirmation for: {order_number}")
-
-        order_details_url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order_number}"
-
-        # Primary path: deterministic sign-in + extraction in one context.
-        try:
-            return await self._scrape_shipping_fallback(order_number)
-        except Exception as primary_exc:
-            logger.warning(
-                "Deterministic shipping scrape primary path failed: %r. Falling back to LLM extraction path.",
-                primary_exc,
-            )
-
-        # Secondary path: session priming + LLM extraction.
-        await self._prime_amazon_session(order_details_url)
-
-        task = f"""
-        IMPORTANT: Session is already authenticated. Do NOT attempt login.
-        Look at the screenshot after every action. Do not return data until you can
-        actually see order/tracking information on the page.
-
-        Step 1: Navigate to {order_details_url}
-
-        Step 2: If sign-in page appears, navigate to {order_details_url} once more.
-        If sign-in still appears after retry, stop and do not fabricate data.
-
-        Step 3: You should now see the Amazon order details page. Find and extract:
-        - Tracking number
-        - Carrier (UPS, USPS, FedEx, Amazon Logistics, etc.)
-        - Delivery/arrival date
-        - Items in this shipment with quantities
-
-        Step 4: If there's a "Track package" link, click it to get more tracking details.
-
-        Only return structured data AFTER you can see the actual order details page with tracking info.
-        """
-
-        browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR)
-
-        agent = Agent(
-            task=task,
-            llm=self.llm,  # type: ignore[arg-type]
-            use_vision=True,
-            max_actions_per_step=5,
-            browser_profile=browser_profile,
-            output_model_schema=ShippingDetails,
-            generate_gif='./logs/agent.gif',
-            save_conversation_path="./logs/agent_conversations",
-            max_failures=10,
-            max_steps=25,
-            step_timeout=180,
-        )
-
-        try:
-            result = await agent.run()
-            errors = [err for err in result.errors() if err]
-            if errors:
-                logger.warning(
-                    "LLM shipping scrape failed (last_error=%r). Trying deterministic fallback.",
-                    errors[-1],
-                )
-                try:
-                    return await self._scrape_shipping_fallback(order_number)
-                except Exception as fallback_exc:
-                    raise RuntimeError(
-                        f"Agent failed during shipping scrape. last_error={errors[-1]!r} "
-                        f"final_result={result.final_result()!r} fallback_error={fallback_exc!r}"
-                    ) from fallback_exc
-
-            structured = self._get_validated_structured_output(result, ShippingDetails, f"shipping {order_number}")
-            if self._looks_like_placeholder_shipping(structured):
-                logger.warning("LLM shipping scrape returned placeholder/auth text. Trying deterministic fallback.")
-                try:
-                    return await self._scrape_shipping_fallback(order_number)
-                except Exception as fallback_exc:
-                    raise RuntimeError(
-                        f"Shipping scrape returned placeholder data and fallback failed: {fallback_exc!r}. "
-                        f"final_result={result.final_result()!r}"
-                    ) from fallback_exc
-            return structured
-        finally:
-            await agent.close()
+        return await self._scrape_shipping_fallback(order_number)

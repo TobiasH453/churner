@@ -28,6 +28,8 @@ __pycache__/
 # Tooling/local metadata
 .codex/
 .claude/
+.planning/
+CODEX_HANDOFF.md
 
 # OS/editor files
 .DS_Store

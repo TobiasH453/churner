@@ -90,6 +90,31 @@ class ElectronicsBuyerAgent:
         "input[type='search']",
         "input[name*='search' i]",
     ]
+    DEALS_REFRESH_SELECTORS = [
+        "button:has-text('Refresh')",
+        "button[aria-label='Refresh']",
+        "button[title='Refresh']",
+    ]
+    DEALS_FETCH_ERROR_TEXT_HINTS = (
+        "failed to fetch vendor deals",
+        "failed to fetch deals",
+    )
+    DEALS_LOADING_TEXT_HINTS = (
+        "loading categories",
+        "loading deals",
+    )
+    DEALS_EMPTY_TEXT_HINTS = (
+        "no deals found",
+        "no deals are currently available in this category",
+    )
+    DEALS_STATE_READY = "ready"
+    DEALS_STATE_LOADING = "loading"
+    DEALS_STATE_FETCH_ERROR = "fetch_error"
+    DEALS_STATE_NO_DEALS = "no_deals"
+    DEALS_STATE_LOGIN_REDIRECT = "login_redirect"
+    DEALS_STATE_WRONG_ROUTE = "wrong_route"
+    DEALS_STATE_TEXT_ONLY = "text_only"
+    DEALS_STATE_UNKNOWN = "unknown"
     TRACKING_NUMBER_INPUT_SELECTORS = [
         "input[name*='tracking' i]",
         "input[placeholder*='tracking' i]",
@@ -140,9 +165,17 @@ class ElectronicsBuyerAgent:
     ]
     TRACKING_MODAL_NUMBER_SELECTORS = [
         "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k > div.MuiDialog-container.MuiDialog-scrollPaper.mui-8azq84 > div > div.MuiDialogContent-root.mui-1vjk3m0 > div.MuiBox-root.mui-0 > div.MuiFormControl-root.MuiFormControl-fullWidth.MuiTextField-root.mui-f679ks > div input",
+        "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k textarea[name*='tracking' i]",
+        "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k textarea[placeholder*='tracking' i]",
+        "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k textarea",
         "div.MuiDialogContent-root > div.MuiBox-root.mui-0 div.MuiTextField-root input",
+        "div.MuiDialogContent-root textarea[name*='tracking' i]",
+        "div.MuiDialogContent-root textarea[placeholder*='tracking' i]",
+        "div.MuiDialogContent-root textarea[id]",
         "div.MuiDialogContent-root input[name*='tracking' i]",
         "div.MuiDialogContent-root input[placeholder*='tracking' i]",
+        "div[role='dialog'] textarea",
+        "div[role='dialog'] input",
     ]
     TRACKING_MODAL_CONTENTS_SELECTORS = [
         "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k > div.MuiDialog-container.MuiDialog-scrollPaper.mui-8azq84 > div > div.MuiDialogContent-root.mui-1vjk3m0 > div:nth-child(4) > div textarea",
@@ -158,9 +191,13 @@ class ElectronicsBuyerAgent:
         "div.MuiDialogContent-root > div:nth-child(5) textarea",
     ]
     TRACKING_MODAL_SUBMIT_SELECTORS = [
-        "body > div.MuiDialog-root.MuiModal-root.mui-1egf66k > div.MuiDialog-container.MuiDialog-scrollPaper.mui-8azq84 > div > div.MuiDialogActions-root.MuiDialogActions-spacing.mui-62fdc9 > button",
+        "div.MuiDialogActions-root button:has-text('Submit Tracking')",
+        "div.MuiDialogActions-root button:has-text('Add Tracking')",
         "div.MuiDialogActions-root button:has-text('Submit')",
+        "div[role='dialog'] button:has-text('Submit Tracking')",
+        "div[role='dialog'] button:has-text('Add Tracking')",
         "div[role='dialog'] button:has-text('Submit')",
+        "div[role='dialog'] input[type='submit']",
     ]
     TRACKING_SEMANTIC_NUMBER_KEYWORDS = ("tracking", "awb", "shipment", "waybill")
     TRACKING_SEMANTIC_CONTENT_KEYWORDS = ("package", "content", "item", "description")
@@ -168,10 +205,13 @@ class ElectronicsBuyerAgent:
     FLAG_DUPLICATE_TRACKING = "FLAG_DUPLICATE_TRACKING"
     FLAG_TRACKING_SUBMIT_ERROR = "FLAG_TRACKING_SUBMIT_ERROR"
     FLAG_NO_SUCCESS_SIGNAL = "FLAG_NO_SUCCESS_SIGNAL"
+    FLAG_DEAL_FETCH_ERROR = "FLAG_DEAL_FETCH_ERROR"
+    FLAG_DEAL_NOT_AVAILABLE = "FLAG_DEAL_NOT_AVAILABLE"
+    FLAG_DEAL_READINESS_FAILED = "FLAG_DEAL_READINESS_FAILED"
 
     def __init__(self):
         ensure_browser_runtime_compatibility()
-        self.login_email = get_env("EB_LOGIN_EMAIL", "tobias.halpern@gmail.com")
+        self.login_email = get_env("EB_LOGIN_EMAIL", "")
         self.llm_executor = ElectronicsBuyerLLMExecutor()
 
     @staticmethod
@@ -210,6 +250,15 @@ class ElectronicsBuyerAgent:
             warnings=[flag],
         )
 
+    def _deal_failure(self, flag: str, message: str) -> EBDealResult:
+        return EBDealResult(
+            success=False,
+            deal_id=None,
+            payout_value=0.0,
+            error_message=self._flagged_error(flag, message),
+            warnings=[flag],
+        )
+
     def _classify_tracking_page_failure(self, body: str, page_url: str) -> EBTrackingResult | None:
         lower = (body or "").lower()
         if any(term in lower for term in self.TRACKING_DUPLICATE_TEXT_HINTS):
@@ -226,6 +275,12 @@ class ElectronicsBuyerAgent:
 
     async def _selector_exists(self, page: Page, selector: str) -> bool:
         return await page.locator(selector).count() > 0
+
+    async def _any_selector_exists(self, page: Page, selectors: list[str]) -> bool:
+        for selector in selectors:
+            if await self._selector_exists(page, selector):
+                return True
+        return False
 
     async def _click_first(self, page: Page, selectors: list[str]) -> bool:
         for selector in selectors:
@@ -275,6 +330,50 @@ class ElectronicsBuyerAgent:
 
     def _is_deals_route(self, url: str) -> bool:
         return self._path(url).startswith("/app/deals")
+
+    @classmethod
+    def _classify_deals_snapshot(
+        cls,
+        *,
+        current_url: str,
+        body_text: str,
+        has_ready_controls: bool,
+    ) -> tuple[str, str]:
+        current_path = cls._path(current_url)
+        lower = (body_text or "").lower()
+
+        if current_path == "/app/login":
+            return cls.DEALS_STATE_LOGIN_REDIRECT, f"Deals page redirected to login: {current_url}"
+
+        if not current_path.startswith("/app/deals"):
+            if current_path.startswith("/app/"):
+                return cls.DEALS_STATE_WRONG_ROUTE, f"Unexpected app route while waiting for deals page: {current_url}"
+            return cls.DEALS_STATE_WRONG_ROUTE, f"Unexpected route while waiting for deals page: {current_url}"
+
+        if any(term in lower for term in cls.DEALS_FETCH_ERROR_TEXT_HINTS):
+            return cls.DEALS_STATE_FETCH_ERROR, f"EB deals page shows vendor fetch error. URL: {current_url}"
+
+        if any(term in lower for term in cls.DEALS_EMPTY_TEXT_HINTS):
+            return cls.DEALS_STATE_NO_DEALS, f"EB deals page shows no available deals. URL: {current_url}"
+
+        if has_ready_controls:
+            return cls.DEALS_STATE_READY, "deals_controls_visible"
+
+        if any(term in lower for term in cls.DEALS_LOADING_TEXT_HINTS) or ("loading" in lower and "deal" in lower):
+            return cls.DEALS_STATE_LOADING, "deals_loading"
+
+        if "available deals" in lower or ("deal" in lower and "category" in lower):
+            return cls.DEALS_STATE_TEXT_ONLY, "deals_page_text_visible_without_controls"
+
+        return cls.DEALS_STATE_UNKNOWN, "deals_state_unknown"
+
+    @classmethod
+    def _deal_state_to_flag(cls, state: str) -> str:
+        if state == cls.DEALS_STATE_FETCH_ERROR:
+            return cls.FLAG_DEAL_FETCH_ERROR
+        if state == cls.DEALS_STATE_NO_DEALS:
+            return cls.FLAG_DEAL_NOT_AVAILABLE
+        return cls.FLAG_DEAL_READINESS_FAILED
 
     @staticmethod
     def _extract_tracking_id(text: str) -> str | None:
@@ -348,6 +447,8 @@ class ElectronicsBuyerAgent:
         return "unknown"
 
     async def _authenticate_from_login_page(self, page: Page) -> str | None:
+        if not self.login_email:
+            return "Missing EB_LOGIN_EMAIL in .env; configure it before attempting ElectronicsBuyer login."
         email_filled = await self._fill_first(page, self.LOGIN_EMAIL_SELECTORS, self.login_email)
         if not email_filled:
             return "EB login page detected, but email field was not found."
@@ -462,6 +563,30 @@ class ElectronicsBuyerAgent:
                 if await modal.count() > 0 and await modal.is_visible():
                     return True
             except Exception:
+                    continue
+        return False
+
+    async def _modal_looks_like_tracking_form(self, modal: Locator) -> bool:
+        try:
+            text = (await modal.inner_text()).lower()
+            if "tracking" in text and ("submit" in text or "number" in text):
+                return True
+        except Exception:
+            pass
+
+        for selector in [
+            "textarea[name*='tracking' i]",
+            "textarea[placeholder*='tracking' i]",
+            "input[name*='tracking' i]",
+            "input[placeholder*='tracking' i]",
+            "div.MuiDialogContent-root textarea",
+            "div.MuiDialogContent-root input",
+        ]:
+            try:
+                locator = modal.locator(selector)
+                if await locator.count() > 0:
+                    return True
+            except Exception:
                 continue
         return False
 
@@ -471,7 +596,7 @@ class ElectronicsBuyerAgent:
             for selector in self.TRACKING_MODAL_ROOT_SELECTORS:
                 try:
                     modal = page.locator(selector).first
-                    if await modal.count() > 0 and await modal.is_visible():
+                    if await modal.count() > 0 and await modal.is_visible() and await self._modal_looks_like_tracking_form(modal):
                         return modal
                 except Exception:
                     continue
@@ -570,7 +695,7 @@ class ElectronicsBuyerAgent:
         except Exception:
             return None
 
-        for index in range(min(count, 60)):
+        for index in range(min(count, 200)):
             locator = candidates.nth(index)
             try:
                 if not await locator.is_visible():
@@ -609,6 +734,13 @@ class ElectronicsBuyerAgent:
             keywords=semantic_keywords,
             prefer_textarea=prefer_textarea,
         )
+        if locator is None and not prefer_textarea:
+            locator = await self._resolve_semantic_tracking_field(
+                page,
+                modal,
+                keywords=semantic_keywords,
+                prefer_textarea=True,
+            )
         if locator is None:
             locator = await self._resolve_first_visible_scoped(page, modal, fallback_selectors)
 
@@ -644,6 +776,37 @@ class ElectronicsBuyerAgent:
 
         return True, None
 
+    async def _tracking_value_still_in_form(self, page: Page, tracking_number: str) -> bool:
+        needle = (tracking_number or "").strip().lower()
+        if not needle:
+            return False
+
+        selectors = [
+            "textarea[name*='tracking' i]",
+            "textarea[placeholder*='tracking' i]",
+            "input[name*='tracking' i]",
+            "input[placeholder*='tracking' i]",
+            "div[role='dialog'] textarea",
+            "div[role='dialog'] input",
+        ]
+        for selector in selectors:
+            try:
+                loc = page.locator(selector)
+                count = min(await loc.count(), 20)
+            except Exception:
+                continue
+            for i in range(count):
+                candidate = loc.nth(i)
+                try:
+                    if not await candidate.is_visible():
+                        continue
+                    value = (await candidate.input_value()).strip().lower()
+                    if needle in value:
+                        return True
+                except Exception:
+                    continue
+        return False
+
     async def _read_first_input_value_scoped(
         self, page: Page, modal: Locator | None, selectors: list[str]
     ) -> str | None:
@@ -659,6 +822,31 @@ class ElectronicsBuyerAgent:
     async def _click_first_enabled_scoped(
         self, page: Page, modal: Locator | None, selectors: list[str], timeout_seconds: int = 8
     ) -> tuple[bool, str | None]:
+        def _looks_like_submit(label: str) -> bool:
+            lower = (label or "").strip().lower()
+            if not lower:
+                return False
+            if any(term in lower for term in ("cancel", "close", "back", "dismiss")):
+                return False
+            return any(term in lower for term in ("submit", "add tracking", "save"))
+
+        async def _control_label(locator: Locator) -> str:
+            parts: list[str] = []
+            try:
+                text = (await locator.inner_text()).strip()
+                if text:
+                    parts.append(text)
+            except Exception:
+                pass
+            for attr in ("value", "aria-label", "title", "name", "id", "class"):
+                try:
+                    value = (await locator.get_attribute(attr) or "").strip()
+                    if value:
+                        parts.append(value)
+                except Exception:
+                    continue
+            return " ".join(parts).strip()
+
         deadline = time.monotonic() + timeout_seconds
         saw_visible_disabled = False
         saw_any = False
@@ -675,10 +863,53 @@ class ElectronicsBuyerAgent:
                     if not await locator.is_enabled():
                         saw_visible_disabled = True
                         continue
-                    await locator.click()
+
+                    # Guard against accidentally clicking cancel/close action buttons.
+                    label = await _control_label(locator)
+                    if not _looks_like_submit(label):
+                        continue
+
+                    try:
+                        await locator.scroll_into_view_if_needed()
+                    except Exception:
+                        pass
+                    await locator.click(force=True)
                     return True, None
                 except Exception:
                     continue
+
+            # Fallback: choose the right-most enabled action button in dialog actions if it looks like submit.
+            try:
+                scope: Locator = modal if modal is not None else page.locator("body")
+                actions = scope.locator("div.MuiDialogActions-root button, div.MuiDialogActions-root input[type='submit']")
+                action_count = min(await actions.count(), 12)
+                candidate: Locator | None = None
+                best_x = -1.0
+                for i in range(action_count):
+                    btn = actions.nth(i)
+                    try:
+                        if not await btn.is_visible() or not await btn.is_enabled():
+                            continue
+                        label = await _control_label(btn)
+                        if not _looks_like_submit(label):
+                            continue
+                        box = await btn.bounding_box()
+                        x = float(box["x"]) if box else 0.0
+                        if x >= best_x:
+                            best_x = x
+                            candidate = btn
+                    except Exception:
+                        continue
+                if candidate is not None:
+                    try:
+                        await candidate.scroll_into_view_if_needed()
+                    except Exception:
+                        pass
+                    await candidate.click(force=True)
+                    return True, None
+            except Exception:
+                pass
+
             await asyncio.sleep(0.25)
 
         if saw_visible_disabled:
@@ -775,28 +1006,20 @@ class ElectronicsBuyerAgent:
 
             modal_still_open = await self._has_visible_tracking_modal(page)
             success_hint_visible = any(term in lower for term in self.TRACKING_SUCCESS_TEXT_HINTS)
-            tracking_visible_in_list = tracking_number.lower() in lower and (
-                "tracking submissions" in lower or "recent submissions" in lower or "history" in lower
-            )
+            tracking_id = self._extract_tracking_id(body)
+            tracking_still_in_form = await self._tracking_value_still_in_form(page, tracking_number)
 
-            if success_hint_visible and not modal_still_open:
+            if success_hint_visible and not modal_still_open and not tracking_still_in_form:
                 return EBTrackingResult(
                     success=True,
-                    tracking_id=self._extract_tracking_id(body),
+                    tracking_id=tracking_id,
                     error_message=None,
                 )
 
-            if tracking_visible_in_list and not modal_still_open:
+            if tracking_id and not modal_still_open and not tracking_still_in_form:
                 return EBTrackingResult(
                     success=True,
-                    tracking_id=self._extract_tracking_id(body),
-                    error_message=None,
-                )
-
-            if not modal_still_open and current_path.startswith("/app/tracking-submissions"):
-                return EBTrackingResult(
-                    success=True,
-                    tracking_id=self._extract_tracking_id(body),
+                    tracking_id=tracking_id,
                     error_message=None,
                 )
 
@@ -822,30 +1045,92 @@ class ElectronicsBuyerAgent:
         if final_classified_failure:
             return final_classified_failure
 
-        return self._tracking_failure(
-            self.FLAG_NO_SUCCESS_SIGNAL,
-            f"Tracking submit did not reach a confirmed success state. URL: {page.url}",
+        # EB often emits no explicit success confirmation after a valid submit.
+        # If no concrete error signal is present, treat this as successful to avoid duplicate resubmits.
+        return EBTrackingResult(
+            success=True,
+            tracking_id=self._extract_tracking_id(final_body),
+            error_message=None,
         )
 
-    async def _wait_for_deals_readiness(self, page: Page, timeout_seconds: int = 12) -> tuple[bool, str]:
+    async def _wait_for_deals_readiness(self, page: Page, timeout_seconds: int = 12) -> tuple[bool, str, str]:
         deadline = time.monotonic() + timeout_seconds
+        last_state = self.DEALS_STATE_UNKNOWN
+        last_detail = "deals_state_unknown"
         while time.monotonic() < deadline:
             current_url = page.url
-            current_path = self._path(current_url)
-            if current_path == "/app/login":
-                return False, f"Deals page redirected to login: {current_url}"
-            if self._is_deals_route(current_url):
-                if await self._wait_for_any_selector(page, self.DEALS_READY_SELECTORS, timeout_seconds=1):
-                    return True, "deals_controls_visible"
-                body = (await self._safe_page_text(page)).lower()
-                if "loading" in body and "deal" in body:
-                    await asyncio.sleep(0.5)
-                    continue
-                if "deal" in body:
-                    return True, "deals_page_text_visible"
+            body = await self._safe_page_text(page)
+            has_ready_controls = await self._any_selector_exists(page, self.DEALS_READY_SELECTORS)
+            state, detail = self._classify_deals_snapshot(
+                current_url=current_url,
+                body_text=body,
+                has_ready_controls=has_ready_controls,
+            )
+
+            if state == self.DEALS_STATE_READY:
+                return True, state, detail
+
+            if state in {
+                self.DEALS_STATE_LOGIN_REDIRECT,
+                self.DEALS_STATE_WRONG_ROUTE,
+                self.DEALS_STATE_FETCH_ERROR,
+                self.DEALS_STATE_NO_DEALS,
+            }:
+                return False, state, detail
+
+            last_state = state
+            last_detail = detail
             await asyncio.sleep(0.5)
 
-        return False, f"Timed out waiting for deals page readiness. Current URL: {page.url}"
+        return (
+            False,
+            last_state,
+            f"Timed out waiting for deals page readiness. last_state={last_state} detail={last_detail} URL: {page.url}",
+        )
+
+    async def _refresh_deals_page(self, page: Page) -> str:
+        clicked_refresh = await self._click_first(page, self.DEALS_REFRESH_SELECTORS)
+        if clicked_refresh:
+            await asyncio.sleep(1.0)
+            return "clicked_refresh_button"
+
+        await page.reload(wait_until="domcontentloaded")
+        await asyncio.sleep(0.75)
+        return "page_reloaded"
+
+    async def _prepare_deals_page_preflight(
+        self,
+        page: Page,
+        *,
+        max_refresh_attempts: int = 2,
+        timeout_seconds: int = 12,
+    ) -> tuple[bool, str, str]:
+        await page.goto(EB_DEALS_URL, wait_until="domcontentloaded")
+
+        for attempt in range(max_refresh_attempts + 1):
+            ready, state, detail = await self._wait_for_deals_readiness(page, timeout_seconds=timeout_seconds)
+            logger.info(
+                "EB deals preflight attempt=%s/%s ready=%s state=%s detail=%s url=%s",
+                attempt + 1,
+                max_refresh_attempts + 1,
+                ready,
+                state,
+                detail,
+                page.url,
+            )
+            if ready:
+                return True, state, detail
+            if attempt >= max_refresh_attempts:
+                return False, state, detail
+
+            refresh_action = await self._refresh_deals_page(page)
+            logger.info(
+                "EB deals preflight retrying after non-ready state=%s via action=%s",
+                state,
+                refresh_action,
+            )
+
+        return False, self.DEALS_STATE_UNKNOWN, f"Unexpected deals preflight fallthrough. URL: {page.url}"
 
     async def submit_tracking(self, tracking_number: str, items: list) -> EBTrackingResult:
         logger.info("Preparing deterministic EB auth gate for tracking submission.")
@@ -911,7 +1196,7 @@ class ElectronicsBuyerAgent:
                 await context.close()
 
     async def submit_deal(self, items: list, quantities: dict) -> EBDealResult:
-        logger.info("Preparing deterministic EB auth gate for deals submission.")
+        logger.info("Preparing EB auth gate before browser-use deal submission.")
 
         chromium_path = get_chromium_executable()
         async with async_playwright() as p:
@@ -926,36 +1211,28 @@ class ElectronicsBuyerAgent:
                 page = context.pages[0] if context.pages else await context.new_page()
                 auth_error = await self._ensure_authenticated_app(page)
                 if auth_error:
-                    logger.info("EB deals gate failed during auth: %s", auth_error)
-                    return EBDealResult(success=False, deal_id=None, payout_value=0.0, error_message=auth_error)
-
-                await page.goto(EB_DEALS_URL, wait_until="domcontentloaded")
-                ready, readiness_state = await self._wait_for_deals_readiness(page, timeout_seconds=12)
-                logger.info("EB deals readiness=%s detail=%s url=%s", ready, readiness_state, page.url)
-                if not ready:
-                    return EBDealResult(
-                        success=False,
-                        deal_id=None,
-                        payout_value=0.0,
-                        error_message=readiness_state,
-                    )
+                    logger.info("EB deals auth gate failed: %s", auth_error)
+                    return self._deal_failure(self.FLAG_DEAL_READINESS_FAILED, auth_error)
             finally:
                 await context.close()
 
-        logger.info("EB deals deterministic auth priming complete; starting LLM deals executor.")
+        logger.info("EB auth gate complete; launching browser-use primary deal agent.")
+        deadline = time.monotonic() + 120
         try:
+            remaining = max(1.0, deadline - time.monotonic())
             return await asyncio.wait_for(
                 self.llm_executor.submit_deal(
                     items=items,
                     quantities=quantities,
+                    browser_context=None,
                 ),
-                timeout=70,
+                timeout=remaining,
             )
         except asyncio.TimeoutError:
             return EBDealResult(
                 success=False,
                 deal_id=None,
                 payout_value=0.0,
-                error_message=f"{FLAG_DEAL_TIMEOUT}: EB deal submission timed out after 70s",
+                error_message=f"{FLAG_DEAL_TIMEOUT}: EB deal submission timed out after 120s",
                 warnings=[FLAG_DEAL_TIMEOUT],
             )

@@ -4,7 +4,7 @@ This project uses a file-based secret onboarding flow.
 
 Do not paste secrets into terminal prompts. Edit `.env` directly.
 
-## Canonical sequence
+## Canonical Sequence
 
 Run these commands from the repository root.
 
@@ -28,7 +28,7 @@ bash scripts/validate-env.sh
 bash scripts/services-up.sh
 ```
 
-## Required key groups
+## Required Key Groups
 
 Personal Amazon route:
 - `AMAZON_EMAIL`
@@ -46,17 +46,27 @@ Core runtime keys:
 - `SERVER_PORT`
 - `N8N_PORT`
 
-## Validator output contract
+Optional runtime overrides:
+- `AMAZON_AGENT_PM2_NAME`
+- `N8N_PM2_NAME`
+- `PM2_HOME`
+- `N8N_USER_FOLDER`
+- `PYTHON_BIN`
+- `N8N_BIN`
+
+`PYTHON_BIN=venv/bin/python` is the preferred local virtualenv path when you override it explicitly.
+
+## Validator Output Contract
 
 Validation never prints secret values. Output references key names only.
 
-### Pass example
+### Pass Example
 
 ```text
 [PASS] Environment validation succeeded. Required keys are present and format checks passed.
 ```
 
-### Fail example
+### Fail Example
 
 ```text
 [FAIL] Environment validation failed with N issue(s):
@@ -65,11 +75,11 @@ Validation never prints secret values. Output references key names only.
 ```
 
 When validation fails:
-1. Edit `.env`
-2. Rerun `bash scripts/validate-env.sh`
-3. Proceed only after a pass result
+1. edit `.env`
+2. rerun `bash scripts/validate-env.sh`
+3. proceed only after a pass result
 
-## Security guardrails
+## Security Guardrails
 
 - Keep `.env` local; never commit it.
 - Do not screenshot or share secret values.

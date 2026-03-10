@@ -59,13 +59,16 @@ check_network_probe() {
 }
 
 check_partial_state() {
-  if [[ -d "${REPO_ROOT}/venv314" && ! -x "${REPO_ROOT}/venv314/bin/python3" ]]; then
-    record_failure \
-      "Detected partial setup: venv314 exists but python binary is missing." \
-      "rm -rf venv314 && bash scripts/rebuild_py39_env.sh venv314" \
-      "${REPO_ROOT}" \
-      "Incomplete virtual environment can produce non-deterministic install behavior."
-  fi
+  local env_dir
+  for env_dir in venv venv314 venv313 venv312 venv39; do
+    if [[ -d "${REPO_ROOT}/${env_dir}" && ! -x "${REPO_ROOT}/${env_dir}/bin/python3" ]]; then
+      record_failure \
+        "Detected partial setup: ${env_dir} exists but python binary is missing." \
+        "rm -rf ${env_dir} && bash scripts/rebuild_venv.sh ${env_dir}" \
+        "${REPO_ROOT}" \
+        "Incomplete virtual environment can produce non-deterministic install behavior."
+    fi
+  done
 
   if [[ -f "${REPO_ROOT}/.env" && ! -s "${REPO_ROOT}/.env" ]]; then
     record_failure \
@@ -101,7 +104,7 @@ run_preflight() {
   install_info "Running deterministic preflight checks..."
 
   check_command "bash" "brew install bash" "Installer requires a modern Bash runtime."
-  check_command "python3" "brew install python@3.14" "Python is required for FastAPI and automation runtime."
+  check_command "python3" "brew install python@3.13" "Python 3.13 is the preferred runtime for FastAPI and browser automation."
   check_command "pip3" "python3 -m ensurepip --upgrade" "pip is required to install Python dependencies."
   check_command "node" "brew install node" "Node.js powers n8n and JS tooling."
   check_command "npm" "brew install node" "npm is required for global n8n/pm2 install."

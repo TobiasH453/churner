@@ -2,8 +2,9 @@ import asyncio
 import inspect
 import json
 import os
+import re
 from typing import Any
-from browser_use import Agent
+from browser_use import Agent, BrowserSession
 from browser_use.llm import ChatAnthropic
 from models import EBDealResult, EBTrackingResult
 from eb_contracts import enforce_deal_contract
@@ -23,6 +24,10 @@ os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
 USER_DATA_DIR = "./data/browser-profile"
 
 class ElectronicsBuyerLLMExecutor:
+    DEAL_COLOR_HINTS = ("pink", "blue", "silver", "black", "white", "yellow", "green", "purple", "starlight")
+    DEAL_MAX_STEPS = 12
+    DEAL_TIMEOUT_SECONDS = 120
+
     def __init__(self):
         ensure_browser_runtime_compatibility()
         self.llm = ChatAnthropic(
@@ -32,16 +37,100 @@ class ElectronicsBuyerLLMExecutor:
             timeout=30,
             max_retries=10,
         )
-        self.username = get_env('EB_USERNAME')
-        self.password = get_env('EB_PASSWORD')
+        self.login_email = get_env("EB_LOGIN_EMAIL", "")
         signature = inspect.signature(Agent.__init__)
         self._agent_init_params = set(signature.parameters.keys())
+        self._deal_browser_session: BrowserSession | None = None
 
     def _supports_agent_param(self, param_name: str) -> bool:
         return param_name in self._agent_init_params
 
     def supports_browser_context_handoff(self) -> bool:
         return self._supports_agent_param("browser_context")
+
+    @staticmethod
+    def _normalize_qty(raw_qty: Any) -> int | None:
+        try:
+            qty = int(raw_qty)
+        except (TypeError, ValueError):
+            return None
+        if qty <= 0:
+            return None
+        return qty
+
+    @classmethod
+    def _build_item_search_spec(cls, item_name: str, quantity: int) -> dict[str, Any]:
+        lower = (item_name or "").lower()
+
+        tokens: list[str] = []
+        required_tokens: list[str] = []
+
+        if "ipad" in lower:
+            tokens.append("ipad")
+            required_tokens.append("ipad")
+
+        if "a16" in lower:
+            tokens.append("a16")
+            required_tokens.append("a16")
+
+        size_match = re.search(r"\b(\d{1,2})\s*(?:-|\s)?inch\b", lower)
+        if size_match:
+            tokens.append(size_match.group(1))
+
+        storage_match = re.search(r"\b(\d{2,4})\s?gb\b", lower)
+        if storage_match:
+            storage_token = f"{storage_match.group(1)}gb"
+            tokens.append(storage_token)
+            required_tokens.append(storage_token)
+
+        color_token = None
+        for color in cls.DEAL_COLOR_HINTS:
+            if color in lower:
+                color_token = color
+                break
+        if color_token:
+            tokens.append(color_token)
+            required_tokens.append(color_token)
+
+        if "wifi" in lower or "wi-fi" in lower:
+            tokens.append("wifi")
+
+        year_match = re.search(r"\b(20\d{2})\b", lower)
+        if year_match:
+            tokens.append(year_match.group(1))
+
+        # Stable fallback so query is never empty.
+        if not tokens:
+            tokens.extend(part for part in re.findall(r"[a-z0-9]+", lower)[:6] if part)
+
+        deduped_tokens = list(dict.fromkeys(tokens))
+        deduped_required = list(dict.fromkeys(required_tokens))
+        query = " ".join(deduped_tokens[:7]).strip()
+        refine_query_parts = [color_token, storage_match.group(1) + "gb" if storage_match else None, "ipad", "a16"]
+        refine_query = " ".join(part for part in refine_query_parts if part).strip() or query
+
+        return {
+            "item_name": item_name,
+            "quantity": quantity,
+            "query": query,
+            "refine_query": refine_query,
+            "required_tokens": deduped_required,
+        }
+
+    @classmethod
+    def _build_deal_search_specs(cls, quantities: dict) -> list[dict[str, Any]]:
+        specs: list[dict[str, Any]] = []
+        for raw_name, raw_qty in (quantities or {}).items():
+            if not isinstance(raw_name, str):
+                continue
+            name = raw_name.strip()
+            if not name:
+                continue
+            qty = cls._normalize_qty(raw_qty)
+            if qty is None:
+                continue
+            specs.append(cls._build_item_search_spec(name, qty))
+        return specs
 
     def _build_agent(
         self,
@@ -51,6 +140,7 @@ class ElectronicsBuyerLLMExecutor:
         max_steps: int,
         max_actions_per_step: int | None = None,
         browser_context: Any = None,
+        browser_session: BrowserSession | None = None,
     ) -> Agent:
         agent_kwargs: dict[str, Any] = dict(
             task=task,
@@ -77,11 +167,35 @@ class ElectronicsBuyerLLMExecutor:
                     "cannot safely run EB LLM in the authenticated browser session."
                 )
             agent_kwargs["browser_context"] = browser_context
+        elif browser_session is not None:
+            if not self._supports_agent_param("browser_session"):
+                raise RuntimeError(
+                    "browser_use Agent does not expose browser_session in this runtime; "
+                    "cannot reuse an authenticated keep-alive session."
+                )
+            agent_kwargs["browser_session"] = browser_session
         else:
             browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR)
             agent_kwargs["browser_profile"] = browser_profile
 
         return Agent(**agent_kwargs)
+
+    def _get_or_create_deal_browser_session(self) -> BrowserSession:
+        if self._deal_browser_session is not None:
+            return self._deal_browser_session
+        browser_profile = create_stealth_profile(user_data_dir=USER_DATA_DIR).model_copy(update={"keep_alive": True})
+        self._deal_browser_session = BrowserSession(browser_profile=browser_profile)
+        return self._deal_browser_session
+
+    async def _reset_deal_browser_session(self) -> None:
+        if self._deal_browser_session is None:
+            return
+        try:
+            await self._deal_browser_session.kill()
+        except Exception:
+            logger.exception("Failed to kill stale EB deal browser session.")
+        finally:
+            self._deal_browser_session = None
 
     async def submit_deal(self, items: list, quantities: dict, browser_context: Any = None) -> EBDealResult:
         """
@@ -97,79 +211,154 @@ class ElectronicsBuyerLLMExecutor:
             browser_context is not None,
             self.supports_browser_context_handoff(),
         )
+        logger.info("EB LLM deal browser_session_support=%s", self._supports_agent_param("browser_session"))
 
-        # Create task for the agent
-        items_str = ", ".join([f"{q}x {name}" for name, q in quantities.items()])
+        if not self.login_email:
+            return EBDealResult(
+                success=False,
+                deal_id=None,
+                payout_value=0.0,
+                error_message="Missing EB_LOGIN_EMAIL in .env; configure it before running deal submission.",
+            )
+
+        search_specs = self._build_deal_search_specs(quantities)
+        if not search_specs:
+            return EBDealResult(
+                success=False,
+                deal_id=None,
+                payout_value=0.0,
+                error_message="No valid deal search specs could be built from requested quantities.",
+            )
+        search_specs_json = json.dumps(search_specs, ensure_ascii=True)
 
         task = f"""
-        IMPORTANT: Authentication and dashboard navigation are already complete.
-        Do NOT attempt login or OTP.
+        Execute this in the current browser-use session only.
+        Keep the flow constrained and deterministic-like. Do not freestyle.
 
-        1. Navigate to https://electronicsbuyer.gg/app/deals if not already on deals.
-        2. On the deals page, search or scroll to find deals for: {items_str}
-        3. For each matching product:
-           - Click the "Commit" or "Submit Deal" button on the deal card
-           - Enter the quantity you're committing: {quantities}
-           - Submit the commitment
-           - Note the payout value per unit (shown on the deal card)
-        4. Calculate total cashout: sum of (payout_per_unit × quantity) for all items
-        5. Wait briefly for result.
+        1. Start at https://electronicsbuyer.gg/ (homepage).
+        2. Click the "Dashboard" button to enter the app session.
+           - Immediately click the first visible "Dashboard" / "Access Dashboard" control in the first viewport.
+           - Do not pause to inspect cards, metrics, or other page sections before this click.
+           - If redirected to login/OTP, fill email with "{self.login_email}", click Continue/Send code, then wait up to 20 seconds for the human to enter OTP and submit.
+           - After the wait, continue only if app/dashboard access is visible. If still on login/OTP, STOP and return success=false with the current URL.
+        3. Navigate to https://electronicsbuyer.gg/app/deals.
+        4. Handle deals-page availability:
+           - If you see "Failed to fetch vendor deals" (or similar), click Refresh and retry.
+           - Retry at most 2 times total.
+           - If still failing after retries, STOP and return success=false with the visible error text.
+           - If you see "No deals found" / "No deals are currently available", STOP and return success=false.
+        5. SEARCH SPECS (use exactly; do not invent extra products):
+           {search_specs_json}
+        6. Use each search spec independently:
+           - Focus search input, clear existing text, enter spec.query.
+           - Wait one step for filtered cards.
+           - Choose a card only if visible text/title includes ALL spec.required_tokens (case-insensitive).
+           - If no match, run exactly ONE refine attempt using spec.refine_query, then re-check.
+           - If still no match, add spec.item_name to unmatched_items and continue to next spec.
+        7. For each matched card:
+           - Click that card's "Commit" button.
+           - Enter spec.quantity.
+           - Submit the commitment.
+           - Record payout per unit and include item in payout_captured_items only if payout is visibly confirmed.
+           - Include item in submitted_items only if commitment submit is visibly confirmed.
+        8. Calculate total cashout: sum of (payout_per_unit × quantity) for committed items only.
+        9. Wait briefly for result.
            - If you see any error/failed message, STOP immediately and return success=false with the error text.
-           - Do NOT retry submission more than once.
-        6. Return success confirmation only if a real success confirmation is visible.
-        7. Your structured output must include strict accounting fields:
-           - submitted_items: item names that were actually committed/submitted
-           - payout_captured_items: item names with confirmed payout values
-           - unmatched_items: requested items you could not match/submit
-           - warnings: include FLAG_UNMATCHED_ITEMS when unmatched_items is non-empty
+        10. Success semantics:
+            - success=true if at least one item is in submitted_items and payout is captured for submitted items.
+            - success=false if zero items are committed.
+            - If any requested items are unmatched, include them and add FLAG_UNMATCHED_ITEMS in warnings.
+        11. Your structured output must include strict accounting fields:
+            - submitted_items: item names that were actually committed/submitted
+            - payout_captured_items: item names with confirmed payout values
+            - unmatched_items: requested items you could not match/submit
+            - warnings: include FLAG_UNMATCHED_ITEMS when unmatched_items is non-empty
         """
 
-        agent = self._build_agent(
-            task=task,
-            output_model_schema=EBDealResult,
-            max_steps=10,
-            max_actions_per_step=4,
-            browser_context=browser_context,
+        deal_session_retry = 2 if browser_context is None else 1
+        for attempt in range(1, deal_session_retry + 1):
+            deal_browser_session = None
+            if browser_context is None:
+                deal_browser_session = self._get_or_create_deal_browser_session()
+
+            try:
+                agent = self._build_agent(
+                    task=task,
+                    output_model_schema=EBDealResult,
+                    max_steps=self.DEAL_MAX_STEPS,
+                    max_actions_per_step=4,
+                    browser_context=browser_context,
+                    browser_session=deal_browser_session,
+                )
+            except Exception as exc:
+                logger.exception("EB deal agent initialization failed.")
+                if attempt < deal_session_retry:
+                    await self._reset_deal_browser_session()
+                    continue
+                return EBDealResult(
+                    success=False,
+                    deal_id=None,
+                    payout_value=0.0,
+                    error_message=f"Deal agent initialization failed: {exc}",
+                )
+
+            try:
+                try:
+                    result = await asyncio.wait_for(agent.run(), timeout=self.DEAL_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    return EBDealResult(
+                        success=False,
+                        deal_id=None,
+                        payout_value=0.0,
+                        error_message=f"EB deal submission timed out after {self.DEAL_TIMEOUT_SECONDS}s",
+                    )
+
+                errors = [err for err in result.errors() if err]
+                if errors:
+                    return EBDealResult(
+                        success=False,
+                        deal_id=None,
+                        payout_value=0.0,
+                        error_message=f"Deal agent failed fast: {errors[-1]}",
+                    )
+
+                try:
+                    structured = result.structured_output
+                except ValidationError:
+                    structured = None
+
+                if structured is None:
+                    recovered = self._recover_deal_output(result.final_result())
+                    if recovered is not None:
+                        return enforce_deal_contract(recovered, quantities)
+                    return EBDealResult(
+                        success=False,
+                        deal_id=None,
+                        payout_value=0.0,
+                        error_message=f"Deal submission agent returned no structured output. final_result={result.final_result()!r}",
+                    )
+                return enforce_deal_contract(structured, quantities)
+            except Exception as exc:
+                if attempt < deal_session_retry:
+                    logger.exception("EB deal agent run failed; resetting browser session for one retry.")
+                    await self._reset_deal_browser_session()
+                    continue
+                logger.exception("EB deal agent run failed on final attempt.")
+                return EBDealResult(
+                    success=False,
+                    deal_id=None,
+                    payout_value=0.0,
+                    error_message=f"Deal agent execution failed: {exc}",
+                )
+            finally:
+                await agent.close()
+
+        return EBDealResult(
+            success=False,
+            deal_id=None,
+            payout_value=0.0,
+            error_message="Deal submission failed before execution could complete.",
         )
-
-        try:
-            try:
-                result = await asyncio.wait_for(agent.run(), timeout=50)
-            except asyncio.TimeoutError:
-                return EBDealResult(
-                    success=False,
-                    deal_id=None,
-                    payout_value=0.0,
-                    error_message="EB deal submission timed out after 50s",
-                )
-
-            errors = [err for err in result.errors() if err]
-            if errors:
-                return EBDealResult(
-                    success=False,
-                    deal_id=None,
-                    payout_value=0.0,
-                    error_message=f"Deal agent failed fast: {errors[-1]}",
-                )
-
-            try:
-                structured = result.structured_output
-            except ValidationError:
-                structured = None
-
-            if structured is None:
-                recovered = self._recover_deal_output(result.final_result())
-                if recovered is not None:
-                    return enforce_deal_contract(recovered, quantities)
-                return EBDealResult(
-                    success=False,
-                    deal_id=None,
-                    payout_value=0.0,
-                    error_message=f"Deal submission agent returned no structured output. final_result={result.final_result()!r}",
-                )
-            return enforce_deal_contract(structured, quantities)
-        finally:
-            await agent.close()
 
     async def submit_tracking(self, tracking_number: str, items: list, browser_context: Any = None) -> EBTrackingResult:
         """
@@ -206,12 +395,20 @@ class ElectronicsBuyerLLMExecutor:
         7. Return success confirmation only if a real success confirmation is visible.
         """
 
-        agent = self._build_agent(
-            task=task,
-            output_model_schema=EBTrackingResult,
-            max_steps=12,
-            browser_context=browser_context,
-        )
+        try:
+            agent = self._build_agent(
+                task=task,
+                output_model_schema=EBTrackingResult,
+                max_steps=12,
+                browser_context=browser_context,
+            )
+        except Exception as exc:
+            logger.exception("EB tracking agent initialization failed.")
+            return EBTrackingResult(
+                success=False,
+                tracking_id=None,
+                error_message=f"Tracking agent initialization failed: {exc}",
+            )
 
         try:
             try:

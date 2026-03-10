@@ -1,15 +1,13 @@
 # Packaging Baseline (Security First)
 
-This document defines the Phase 1 distribution safety baseline.
+This document defines the distribution safety baseline for any shared archive built from this repository.
 
-Scope here is policy and audit guardrails, not final release packaging workflow.
-
-## Canonical policy files
+## Canonical Policy Files
 
 - `.bundleignore` - never-ship patterns
 - `scripts/audit-bundle.sh` - enforcement command
 
-## Never-ship paths
+## Never-Ship Paths
 
 These paths must not appear in a shared bundle:
 
@@ -26,11 +24,12 @@ These paths must not appear in a shared bundle:
 
 Rationale: these files can contain credentials, local session state, or other sensitive runtime artifacts.
 
-Phase 6 controlled exception:
-- A top-level `.env` may ship only when it is a release-safe placeholder identical to `.env.example`.
-- Any `.env` with operator-specific values remains a hard fail.
+## Placeholder `.env` Exception
 
-## Required operator check before distribution
+A top-level `.env` may ship only when it is a release-safe placeholder identical to `.env.example`.
+Any `.env` with operator-specific values remains a hard fail.
+
+## Required Check Before Distribution
 
 Run audit against your candidate bundle input:
 
@@ -47,15 +46,13 @@ bash scripts/audit-bundle.sh --archive /path/to/bundle.tar.gz
 
 Interpretation:
 - `[PASS]` = no forbidden paths matched `.bundleignore`
-- `[PASS]` also allows the Phase 6 placeholder `.env` exception only when `.env` and `.env.example` are identical
+- `[PASS]` also allows the placeholder `.env` exception only when `.env` and `.env.example` are identical
 - `[FAIL]` = remove listed forbidden paths, regenerate candidate, rerun audit
 
-## Baseline operating rule
+## Operating Rule
 
 No archive should be shared unless `scripts/audit-bundle.sh` reports `[PASS]`.
 
-## Deferred to Phase 6
+## Related Release Guidance
 
-- Final bundle structure
-- Release artifact naming/versioning
-- End-user release packaging checklist
+For bundle structure, versioning, and upload flow, use `docs/RELEASE.md`.

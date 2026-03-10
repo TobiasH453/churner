@@ -7,6 +7,8 @@ Local macOS automation for Amazon order and shipping emails using FastAPI, Playw
 - macOS on Apple Silicon
 - `bash`
 - `python3` and `pip3`
+  - Python 3.13 is preferred
+  - Python 3.11-3.13 are the supported versions for this repo
 - `node` and `npm`
 - `pm2`
 - `n8n`
@@ -117,7 +119,7 @@ bash scripts/collect-diagnostics.sh
 
 This creates a shareable diagnostics bundle with redaction and exclusion safeguards.
 
-## Canonical Handoffs
+## Related Docs
 
 - Install details: `docs/INSTALL.md`
 - Environment editing rules: `docs/ENVIRONMENT.md`
@@ -126,3 +128,4 @@ This creates a shareable diagnostics bundle with redaction and exclusion safegua
 - Smoke verification: `docs/SMOKE_VERIFICATION.md`
 - Troubleshooting and diagnostics: `docs/TROUBLESHOOTING.md`
 - Release packaging and checklist: `docs/RELEASE.md`, `docs/RELEASE_CHECKLIST.md`
+- Contract/regression checks: `bash scripts/run-contract-tests.sh`

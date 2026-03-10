@@ -19,7 +19,7 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/verify-smoke-readiness.sh
 
-Runs the Phase 4 smoke readiness checks:
+Runs the smoke readiness checks:
 1) API health endpoint check
 2) Order-confirmation contract check
 3) Shipping-confirmation contract check

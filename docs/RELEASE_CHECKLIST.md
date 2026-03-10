@@ -63,6 +63,7 @@ bash scripts/verify-runtime-operations.sh
 
 ```bash
 bash scripts/verify-n8n-workflow-contract.sh
+bash scripts/run-contract-tests.sh
 SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
 ```
 

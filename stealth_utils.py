@@ -4,6 +4,10 @@ Stealth utilities for human-like browser automation
 import random
 import os
 import glob
+import shutil
+import tempfile
+import time
+from pathlib import Path
 from browser_use.browser.profile import BrowserProfile
 
 STEALTH_BROWSER_ARGS = [
@@ -14,6 +18,21 @@ STEALTH_BROWSER_ARGS = [
 ]
 
 STEALTH_IGNORE_DEFAULT_ARGS = ['--enable-automation']
+
+_VOLATILE_PROFILE_DIR_NAMES = {
+    "cache",
+    "cache_data",
+    "code cache",
+    "gpucache",
+    "grshadercache",
+    "dawngraphitecache",
+    "blob_storage",
+    "service worker",
+    "shadercache",
+    "crashpad",
+}
+_PROFILE_SNAPSHOT_ROOT_PREFIX = "browser-profile-snapshot-"
+_PROFILE_SNAPSHOT_TTL_SECONDS = 6 * 60 * 60
 
 def _find_chromium_executable() -> str:
     """Find Playwright's Chromium executable"""
@@ -48,6 +67,62 @@ def get_chromium_executable() -> str:
     """Public helper for callers that need Playwright launch parity."""
     return _find_chromium_executable()
 
+
+def _is_volatile_component(path_component: str) -> bool:
+    return path_component.strip().lower() in _VOLATILE_PROFILE_DIR_NAMES
+
+
+def _copy_profile_best_effort(src_root: Path, dst_root: Path) -> None:
+    for current_root, dirnames, filenames in os.walk(src_root):
+        current_path = Path(current_root)
+        rel = current_path.relative_to(src_root)
+        rel_parts = rel.parts
+        if any(_is_volatile_component(part) for part in rel_parts):
+            dirnames[:] = []
+            continue
+
+        # Skip volatile directories before os.walk enters them.
+        dirnames[:] = [name for name in dirnames if not _is_volatile_component(name)]
+
+        target_dir = dst_root / rel
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        for filename in filenames:
+            source_file = current_path / filename
+            target_file = target_dir / filename
+            try:
+                shutil.copy2(source_file, target_file)
+            except (FileNotFoundError, PermissionError, OSError):
+                # Chromium mutates profile files while active; ignore transient misses.
+                continue
+
+
+def _prune_old_profile_snapshots(tmp_root: Path) -> None:
+    now = time.time()
+    for child in tmp_root.iterdir():
+        if not child.is_dir() or not child.name.startswith(_PROFILE_SNAPSHOT_ROOT_PREFIX):
+            continue
+        try:
+            age_seconds = now - child.stat().st_mtime
+            if age_seconds > _PROFILE_SNAPSHOT_TTL_SECONDS:
+                shutil.rmtree(child, ignore_errors=True)
+        except OSError:
+            continue
+
+
+def _create_profile_snapshot(user_data_dir: str) -> str:
+    source = Path(user_data_dir).expanduser().resolve()
+    if not source.exists() or not source.is_dir():
+        return user_data_dir
+
+    tmp_root = Path(tempfile.gettempdir())
+    _prune_old_profile_snapshots(tmp_root)
+    snapshot_dir = Path(
+        tempfile.mkdtemp(prefix=_PROFILE_SNAPSHOT_ROOT_PREFIX, dir=str(tmp_root))
+    )
+    _copy_profile_best_effort(source, snapshot_dir)
+    return str(snapshot_dir)
+
 def create_stealth_profile(user_data_dir: str = "./data/browser-profile") -> BrowserProfile:
     """
     Create BrowserProfile with randomized human-like timing
@@ -64,8 +139,10 @@ def create_stealth_profile(user_data_dir: str = "./data/browser-profile") -> Bro
     # Find Playwright's Chromium executable
     chromium_path = _find_chromium_executable()
 
+    safe_user_data_dir = _create_profile_snapshot(user_data_dir)
+
     return BrowserProfile(
-        user_data_dir=user_data_dir,
+        user_data_dir=safe_user_data_dir,
         headless=False,
         executable_path=chromium_path,  # Point to Playwright's Chromium
         wait_between_actions=random_delay,

@@ -17,9 +17,9 @@ The installer always runs in this order:
 
 It writes logs to `logs/install/`.
 
-## 2) Preflight results
+## 2) Read preflight results
 
-Preflight is deterministic and blocks setup changes if requirements are missing.
+Preflight blocks setup changes if required dependencies or network access are missing.
 
 ### Pass
 
@@ -32,8 +32,8 @@ You will see:
 
 You will see one aggregated failure summary, for example:
 - `[FAIL] Preflight failed with N blocking issue(s)`
-- Numbered issue list
-- Numbered manual remediation commands (with exact command, directory, and reason)
+- numbered issue list
+- numbered remediation commands with exact command, directory, and reason
 
 Fix all listed issues, then rerun:
 
@@ -41,29 +41,16 @@ Fix all listed issues, then rerun:
 bash install.sh
 ```
 
-## 3) Manual-required step contract
+## 3) Bootstrap behavior
 
-When a manual step is required, installer output always includes:
-- `Command: ...`
-- `Directory: ...`
-- `Reason: ...`
-
-Then the installer pauses for confirmation:
-
-```text
-Press Enter after completing this step to continue...
-```
-
-## 4) Bootstrap behavior
-
-Bootstrap currently performs safe local setup steps:
-- Creates `logs/` and `data/` directories if missing
-- Creates `.env` from `.env.example` when possible
-- Runs `scripts/validate-env.sh --allow-template-placeholders` when available
+Bootstrap performs safe local setup steps:
+- creates `logs/` and `data/` directories if missing
+- creates `.env` from `.env.example` when possible
+- runs `scripts/validate-env.sh --allow-template-placeholders`
 
 No secret values are printed by installer output.
 
-## 5) Env validation handoff
+## 4) Interpret env validation
 
 The installer summary is authoritative:
 
@@ -81,7 +68,7 @@ bash scripts/services-up.sh
 
 The second command is only expected after you have edited `.env` locally.
 
-## 6) End-of-install handoff
+## 5) Next command after install
 
 At the end of install, the script prints:
 - `Done` checklist
@@ -100,13 +87,13 @@ When the installer ends with `Env Validation PASS`, the next command is:
 bash scripts/services-up.sh
 ```
 
-After services are up, optional deeper install contract replay:
+Optional deeper replay after services are up:
 
 ```bash
 bash scripts/installer-self-check.sh
 ```
 
-Self-check is the final Phase 1 readiness gate. It always prints:
+Self-check always prints:
 - `RESULT: PASS` or `RESULT: FAIL`
 - `READY FOR SMOKE VERIFICATION` or `NOT READY FOR SMOKE VERIFICATION`
 - `NEXT COMMAND: bash scripts/services-status.sh` on pass
@@ -117,7 +104,7 @@ If self-check fails, fix reported blockers and rerun:
 bash scripts/installer-self-check.sh
 ```
 
-## 7) Runtime validation handoff
+## 6) Validate runtime operations
 
 After self-check passes, run runtime validation in this order:
 
@@ -128,31 +115,29 @@ bash scripts/verify-runtime-operations.sh
 
 Expected runtime validation result:
 - `[PASS] Runtime operations validation passed.`
-- Exit code `0`
+- exit code `0`
 
 If runtime validation fails:
-- Follow the printed `Next:` remediation command
-- Refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow
-- Use `docs/TROUBLESHOOTING.md` for consolidated recovery paths (install/runtime/n8n/smoke)
+- follow the printed `Next:` remediation command
+- refer to `docs/RUNTIME_VALIDATION.md` for troubleshooting flow
+- use `docs/TROUBLESHOOTING.md` for consolidated recovery paths
 
-## 8) n8n integration handoff
+## 7) Import the n8n workflow JSON
 
-After runtime validation passes, continue directly to n8n workflow setup:
+After runtime validation passes, continue to workflow setup:
 
 ```bash
 bash scripts/verify-n8n-workflow-contract.sh
 ```
 
 Then follow:
+- `docs/N8N_INTEGRATION.md` for import, credential rebind, and webhook mode guidance
+- `docs/N8N_PAYLOAD_CONTRACT.md` for field-level payload rules
 
-- `docs/N8N_INTEGRATION.md` for import + credential rebind + webhook mode guidance
-- `docs/N8N_PAYLOAD_CONTRACT.md` for field-level payload contract rules
-
-Expected verification cue before/after import:
-
+Expected verification cue before or after import:
 - `[PASS] n8n workflow contract verification passed.`
 
-## 9) Smoke verification handoff
+## 8) Run smoke verification
 
 After runtime and n8n contract verification pass, run smoke verification:
 
@@ -161,14 +146,13 @@ SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
 ```
 
 Expected smoke verification cue:
-
 - `[PASS] Smoke readiness checks passed: health + order + shipping.`
 
 If smoke verification fails:
-- Follow printed `Next:` commands first.
-- Then review `docs/SMOKE_VERIFICATION.md` for stage-specific remediation and rerun flow.
-- If still blocked, use `docs/TROUBLESHOOTING.md` for canonical triage and escalation flow.
-- Collect a diagnostics bundle for support if still unresolved:
+- follow printed `Next:` commands first
+- review `docs/SMOKE_VERIFICATION.md` for stage-specific rerun guidance
+- use `docs/TROUBLESHOOTING.md` for full triage flow if still blocked
+- collect a diagnostics bundle if needed:
 
 ```bash
 bash scripts/collect-diagnostics.sh

@@ -165,6 +165,7 @@ for rel_path in \
   scripts/verify-runtime-operations.sh \
   scripts/verify-n8n-workflow-contract.sh \
   scripts/verify-smoke-readiness.sh \
+  scripts/run-contract-tests.sh \
   scripts/collect-diagnostics.sh \
   install.sh \
   n8n-workflows/03-process-order-v1.0.0.json; do
@@ -215,6 +216,7 @@ assert_contains "README.md" "bash scripts/verify-runtime-operations.sh"
 assert_contains "README.md" "bash scripts/verify-n8n-workflow-contract.sh"
 assert_contains "README.md" "SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh"
 assert_contains "README.md" "bash scripts/collect-diagnostics.sh"
+assert_contains "README.md" "bash scripts/run-contract-tests.sh"
 assert_contains "README.md" "Env Validation PASS"
 assert_contains "README.md" "Env Validation PENDING"
 assert_before "README.md" "bash install.sh" "bash scripts/validate-env.sh"
@@ -243,6 +245,7 @@ assert_contains "docs/RELEASE.md" ".env"
 assert_contains "docs/RELEASE.md" "committed at `HEAD`"
 assert_contains "docs/RELEASE.md" "fail if any required release input is untracked"
 assert_contains "docs/RELEASE.md" "ignore dirty local-only changes"
+assert_contains "docs/RELEASE.md" "bash scripts/run-contract-tests.sh"
 
 print_info "Checking release checklist gate"
 assert_contains "docs/RELEASE_CHECKLIST.md" "**Release version:**"
@@ -254,6 +257,7 @@ assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/services-up.sh"
 assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/services-status.sh"
 assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/verify-runtime-operations.sh"
 assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/verify-n8n-workflow-contract.sh"
+assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/run-contract-tests.sh"
 assert_contains "docs/RELEASE_CHECKLIST.md" "SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh"
 assert_contains "docs/RELEASE_CHECKLIST.md" "bash scripts/collect-diagnostics.sh"
 

@@ -71,12 +71,37 @@ def main() -> int:
     buyer_src = Path("electronics_buyer.py").read_text(encoding="utf-8")
     llm_src = Path("electronics_buyer_llm.py").read_text(encoding="utf-8")
     _assert(
-        "asyncio.wait_for" in buyer_src and "timeout=70" in buyer_src,
+        "deadline = time.monotonic() + 120" in buyer_src and "asyncio.wait_for" in buyer_src,
         "Deal runtime guardrail timeout in electronics_buyer.py must stay bounded.",
     )
     _assert(
-        "asyncio.wait_for(agent.run(), timeout=50)" in llm_src,
-        "LLM deal execution timeout must remain bounded at 50 seconds.",
+        "self.llm_executor.submit_deal(" in buyer_src and "browser_context=None" in buyer_src,
+        "Deal flow must use browser-use as the primary execution path.",
+    )
+    _assert(
+        "auth_error = await self._ensure_authenticated_app(page)" in buyer_src,
+        "Deal flow must run EB auth gate before launching browser-use deal agent.",
+    )
+    _assert(
+        'get_env("EB_LOGIN_EMAIL", "tobias.halpern@gmail.com")' not in buyer_src
+        and 'get_env("EB_LOGIN_EMAIL", "tobias.halpern@gmail.com")' not in llm_src,
+        "EB login email must come from .env without a hardcoded personal fallback.",
+    )
+    _assert(
+        "supports_handoff = self.llm_executor.supports_browser_context_handoff()" not in buyer_src,
+        "Deal flow must not hard-gate on browser_context handoff support.",
+    )
+    _assert(
+        "DEAL_TIMEOUT_SECONDS = 120" in llm_src and "max_steps=self.DEAL_MAX_STEPS" in llm_src,
+        "LLM deal execution limits must remain bounded at 120 seconds and configured max steps.",
+    )
+    _assert(
+        "_deal_browser_session" in llm_src and "keep_alive\": True" in llm_src,
+        "Deal flow must reuse a keep-alive browser session for browser-use execution.",
+    )
+    _assert(
+        "def _build_deal_search_specs" in llm_src and "SEARCH SPECS (use exactly; do not invent extra products)" in llm_src,
+        "LLM deal flow must construct and use constrained per-item search specs.",
     )
 
     print("PASS: deal contract checks")

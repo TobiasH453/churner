@@ -19,7 +19,8 @@ def ensure_browser_runtime_compatibility() -> None:
         logger.warning(
             "Python %s detected. browser-use + langchain-core currently emit "
             "compatibility warnings on Python 3.14+ in some environments. "
-            "Continuing on 3.14, but if you see repeated step failures "
+            "Python 3.13 is the preferred interpreter for this repository. "
+            "Continuing on 3.14+, but if you see repeated step failures "
             "(for example 'items'), run with DEBUG logging to capture full traces.",
             ".".join(map(str, sys.version_info[:3])),
         )

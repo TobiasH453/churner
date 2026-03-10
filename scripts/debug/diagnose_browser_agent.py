@@ -1,28 +1,34 @@
-"""
-Diagnostic: just navigate and describe what the agent sees.
-No structured output — removes the 'done with data' bias.
-"""
+"""Diagnostic helper: navigate and describe the page without structured-output pressure."""
+
 import asyncio
-import sys
 import os
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 from browser_use import Agent
 from browser_use.llm import ChatAnthropic
 from stealth_utils import create_stealth_profile
 
-os.environ.setdefault('TIMEOUT_BrowserStartEvent', '120')
-os.environ.setdefault('TIMEOUT_BrowserLaunchEvent', '120')
-os.environ.setdefault('TIMEOUT_BrowserConnectedEvent', '90')
+os.environ.setdefault("TIMEOUT_BrowserStartEvent", "120")
+os.environ.setdefault("TIMEOUT_BrowserLaunchEvent", "120")
+os.environ.setdefault("TIMEOUT_BrowserConnectedEvent", "90")
 
-async def main():
+
+async def main() -> None:
     order = sys.argv[1] if len(sys.argv) > 1 else input("Order number: ").strip()
     url = f"https://www.amazon.com/gp/your-account/order-details?orderID={order}"
 
     llm = ChatAnthropic(
-        model='claude-sonnet-4-5-20250929',
-        api_key=os.getenv('ANTHROPIC_API_KEY'),
+        model="claude-sonnet-4-5-20250929",
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
         temperature=0.0,
         timeout=60,
         max_retries=10,
@@ -45,7 +51,7 @@ async def main():
         use_vision=True,
         max_actions_per_step=3,
         browser_profile=profile,
-        generate_gif='./logs/diagnose.gif',
+        generate_gif="./logs/diagnose.gif",
         max_steps=5,
     )
 
@@ -55,6 +61,7 @@ async def main():
         print(result.final_result())
     finally:
         await agent.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

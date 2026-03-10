@@ -6,6 +6,8 @@ class EmailData(BaseModel):
     # Required fields (from Claude LLM)
     email_type: Literal["order_confirmation", "shipping_confirmation"]
     order_number: str
+    # Routing hint from n8n: "amz_personal" or "amz_business"
+    account_type: Optional[str] = None
 
     # Optional fields
     grand_total: Optional[str] = None

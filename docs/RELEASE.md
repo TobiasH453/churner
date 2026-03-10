@@ -1,6 +1,6 @@
 # Release Packaging Guide
 
-This is the canonical maintainer guide for creating the Phase 6 distribution bundle.
+This is the canonical maintainer guide for creating the distribution bundle.
 
 ## Supported Release Target
 
@@ -24,8 +24,8 @@ bash scripts/build-release-bundle.sh --version v1.0.0 --output-dir /tmp/phase6-r
 ```
 
 Expected outputs:
-- Staged release directory: `dist/1step-cashouts-v1.0.0-macos-apple-silicon/`
-- Shared artifact: `dist/1step-cashouts-v1.0.0-macos-apple-silicon.zip`
+- staged release directory: `dist/1step-cashouts-v1.0.0-macos-apple-silicon/`
+- shared artifact: `dist/1step-cashouts-v1.0.0-macos-apple-silicon.zip`
 
 The build hard-fails if required inputs are missing, if the version is not `vX.Y.Z`, or if bundle audit fails.
 
@@ -42,7 +42,7 @@ This keeps the shipped `.zip` reproducible from committed source instead of sile
 
 ## What the Bundle Includes
 
-- Application code required for runtime
+- application code required for runtime
 - `install.sh`
 - `requirements.txt`
 - `ecosystem.config.js`
@@ -50,7 +50,7 @@ This keeps the shipped `.zip` reproducible from committed source instead of sile
 - `docs/`
 - `n8n-workflows/`
 - `.env.example`
-- Release-safe `.env` placeholder template identical to `.env.example`
+- release-safe `.env` placeholder template identical to `.env.example`
 - `RELEASE_MANIFEST.txt`
 
 Tests are intentionally excluded from the shared release bundle.
@@ -65,8 +65,8 @@ Never ship:
 - `data/browser-profile/`
 - `data/browser-profile-personal/`
 - `data/browser-profile-business/`
-- Secret-bearing key/certificate files
-- Any real operator `.env`
+- secret-bearing key/certificate files
+- any real operator `.env`
 
 Bundle safety is enforced by:
 
@@ -75,23 +75,25 @@ bash scripts/audit-bundle.sh --archive dist/1step-cashouts-v1.0.0-macos-apple-si
 ```
 
 Allowed exception:
-- A top-level `.env` is permitted only when it is identical to `.env.example`. This allows a ready-to-edit placeholder file in the download without allowing real local secrets into the archive.
+- a top-level `.env` is permitted only when it is identical to `.env.example`
+- this allows a ready-to-edit placeholder file in the download without shipping real local secrets
 
-## Shared Folder Handoff
+## Upload Checklist
 
 Only upload the `.zip` after:
-1. Bundle audit passes
-2. Release checklist is complete
-3. Release docs QA passes
-4. `bash scripts/verify-release-readiness.sh` passes on committed release inputs
+1. bundle audit passes
+2. release checklist is complete
+3. release docs QA passes
+4. `bash scripts/run-contract-tests.sh` passes
+5. `bash scripts/verify-release-readiness.sh` passes on committed release inputs
 
 The file intended for users is the `.zip`, not the staged directory.
 
 ## Workflow Artifact Policy
 
-- Bundle the provided canonical JSON workflow artifact from `n8n-workflows/`
-- Document JSON import only
-- Do not treat workflow authoring or workflow regeneration as part of the release packaging flow
+- bundle the provided canonical JSON workflow artifact from `n8n-workflows/`
+- document JSON import only
+- do not treat workflow authoring or workflow regeneration as part of release packaging
 
 ## Related Docs
 

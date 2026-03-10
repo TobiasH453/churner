@@ -26,12 +26,12 @@ This script runs the runtime lifecycle in order:
 
 Pass signal:
 - `[PASS] Runtime operations validation passed.`
-- Exit code `0`
+- exit code `0`
 
 Fail signal:
-- A stage prints `[FAIL] ...`
-- A `Next:` remediation command is printed
-- Exit code is non-zero
+- a stage prints `[FAIL] ...`
+- a `Next:` remediation command is printed
+- exit code is non-zero
 
 ## Recommended Manual Follow-up
 
@@ -50,14 +50,14 @@ bash scripts/services-up.sh
 bash scripts/services-status.sh
 ```
 
-If still unresolved, continue in `docs/TROUBLESHOOTING.md` (Flow A: Runtime Status Failure).
+If still unresolved, continue in `docs/TROUBLESHOOTING.md`.
 
-## Phase 4 Smoke Verification Handoff
+## Next Step: Smoke Verification
 
 After runtime validation passes, run the smoke readiness command:
 
 ```bash
-bash scripts/verify-smoke-readiness.sh
+SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
 ```
 
 Expected baseline cues:
@@ -65,9 +65,9 @@ Expected baseline cues:
 - `[PASS] Smoke readiness checks passed: health + order + shipping.`
 
 If smoke fails:
-- Follow the printed `Next:` command first.
-- Then review `docs/OPERATIONS.md` recovery steps before rerunning the smoke command.
-- If still blocked, use `docs/TROUBLESHOOTING.md` (Flow C: Smoke Verification Failure).
+- follow the printed `Next:` command first
+- then review `docs/OPERATIONS.md` before rerunning the smoke command
+- if still blocked, use `docs/TROUBLESHOOTING.md`
 
 ## Common Failure Patterns
 

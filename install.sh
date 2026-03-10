@@ -68,11 +68,6 @@ main() {
       install_warn "scripts/validate-env.sh is not present yet."
     fi
 
-    install_manual_step \
-      "source venv314/bin/activate" \
-      "${ROOT_DIR}" \
-      "Activate project virtualenv before running manual automation checks."
-
     bootstrap_ok=1
   fi
 

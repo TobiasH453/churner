@@ -11,7 +11,7 @@ bash scripts/services-logs.sh all 100
 bash scripts/services-down.sh
 ```
 
-Post-install validation handoff:
+After installation, validate the runtime with:
 
 ```bash
 bash scripts/verify-runtime-operations.sh
@@ -19,7 +19,7 @@ bash scripts/verify-runtime-operations.sh
 
 See `docs/RUNTIME_VALIDATION.md` for pass/fail interpretation and first-response remediation.
 
-Phase 3 n8n integration handoff:
+Validate the workflow contract with:
 
 ```bash
 bash scripts/verify-n8n-workflow-contract.sh
@@ -27,21 +27,21 @@ bash scripts/verify-n8n-workflow-contract.sh
 
 See `docs/N8N_INTEGRATION.md` for import/configuration flow and `docs/N8N_PAYLOAD_CONTRACT.md` for field-level contract rules.
 
-Phase 4 smoke verification handoff:
+Validate end-to-end smoke behavior with:
 
 ```bash
 SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh
 ```
 
-See `docs/SMOKE_VERIFICATION.md` for order/shipping smoke input contract, stage-level interpretation, and rerun guidance.
+See `docs/SMOKE_VERIFICATION.md` for order/shipping input contract, stage-level interpretation, and rerun guidance.
 
-Phase 5 diagnostics escalation command:
+Collect diagnostics when first-response recovery fails:
 
 ```bash
 bash scripts/collect-diagnostics.sh
 ```
 
-Use this when first-response recovery fails. The command prints the exact diagnostics bundle path to share with support.
+This command prints the exact diagnostics bundle path to share.
 
 Service-specific logs:
 
@@ -64,7 +64,7 @@ All runtime scripts use the same labels:
 - `[WARN]` non-blocking edge cases
 - `[FAIL]` blocking failures (non-zero exit)
 
-If a dependency is missing (for example `pm2`), scripts print:
+If a dependency is missing, scripts print:
 - `[FAIL] Missing dependency: ...`
 - `Next: ...` remediation command
 
@@ -160,9 +160,9 @@ bash scripts/services-status.sh
 
 ## n8n Contract Recovery
 
-If n8n import/webhook behavior is inconsistent with expected payload contract:
+If n8n import or webhook behavior is inconsistent with the expected payload contract:
 1. Re-import canonical artifact `n8n-workflows/03-process-order-v1.0.0.json`.
-2. Rebind credentials and confirm local API target in workflow HTTP node.
+2. Rebind credentials and confirm the local API target in the workflow HTTP node.
 3. Run `bash scripts/verify-n8n-workflow-contract.sh`.
 4. Follow `docs/N8N_INTEGRATION.md` for test-vs-production webhook mode checks.
-5. If unresolved, continue with `docs/TROUBLESHOOTING.md` n8n contract flow.
+5. If unresolved, continue with `docs/TROUBLESHOOTING.md`.
