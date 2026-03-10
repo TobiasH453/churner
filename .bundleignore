@@ -10,6 +10,7 @@
 .n8n/
 .pm2/
 logs/
+diagnostics/
 data/browser-profile/
 data/browser-profile-personal/
 data/browser-profile-business/

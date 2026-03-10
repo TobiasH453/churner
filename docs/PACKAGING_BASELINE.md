@@ -13,17 +13,22 @@ Scope here is policy and audit guardrails, not final release packaging workflow.
 
 These paths must not appear in a shared bundle:
 
-- `.env`
+- `.env` with local secrets or user-specific values
 - `.env.*` (except committed `.env.example` in repo)
 - `.n8n/`
 - `.pm2/`
 - `logs/`
+- `diagnostics/`
 - `data/browser-profile/`
 - `data/browser-profile-personal/`
 - `data/browser-profile-business/`
 - `*.pem`, `*.key`, `*.p12`, `*.pfx`
 
 Rationale: these files can contain credentials, local session state, or other sensitive runtime artifacts.
+
+Phase 6 controlled exception:
+- A top-level `.env` may ship only when it is a release-safe placeholder identical to `.env.example`.
+- Any `.env` with operator-specific values remains a hard fail.
 
 ## Required operator check before distribution
 
@@ -42,6 +47,7 @@ bash scripts/audit-bundle.sh --archive /path/to/bundle.tar.gz
 
 Interpretation:
 - `[PASS]` = no forbidden paths matched `.bundleignore`
+- `[PASS]` also allows the Phase 6 placeholder `.env` exception only when `.env` and `.env.example` are identical
 - `[FAIL]` = remove listed forbidden paths, regenerate candidate, rerun audit
 
 ## Baseline operating rule

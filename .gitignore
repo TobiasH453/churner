@@ -8,6 +8,8 @@
 # Runtime data
 data/
 logs/
+diagnostics/
+dist/
 *.log
 .n8n/
 .pm2/
