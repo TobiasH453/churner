@@ -38,8 +38,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Distribution
 
-- [ ] **DIST-01**: Operator can download a package bundle containing everything needed for local macOS setup except secrets and local session state.
-- [ ] **DIST-02**: Package documentation clearly identifies what is included, what must be user-provided, and expected first-run steps.
+- [x] **DIST-01**: Operator can download a package bundle containing everything needed for local macOS setup except secrets and local session state.
+- [x] **DIST-02**: Package documentation clearly identifies what is included, what must be user-provided, and expected first-run steps.
 
 ## v2 Requirements
 
@@ -88,8 +88,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VER-03 | Phase 4 | Complete |
 | SUP-01 | Phase 5 | Complete |
 | SUP-02 | Phase 5 | Complete |
-| DIST-01 | Phase 6 | Pending |
-| DIST-02 | Phase 6 | Pending |
+| DIST-01 | Phase 6 | Complete |
+| DIST-02 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 16 total
@@ -98,4 +98,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-17*
-*Last updated: 2026-03-06 after Phase 5 completion*
+*Last updated: 2026-03-10 after Phase 6 completion*

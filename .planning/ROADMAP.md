@@ -15,7 +15,7 @@ This roadmap turns an already-working local automation system into a shippable m
 - [x] **Phase 3: n8n Workflow Packaging & Contract Alignment** - Ship importable workflow and guarantee payload compatibility
 - [x] **Phase 4: Smoke Verification Harness** - Add one-command functional verification for health + order + shipping
 - [x] **Phase 5: Troubleshooting & Diagnostics** - Ship support tooling and recovery guidance
-- [ ] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
+- [x] **Phase 6: Distribution & Release Readiness** - Produce downloadable package and release checklist for v1 ship
 
 ## Phase Details
 
@@ -106,8 +106,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: Define bundle structure and packaging steps
-- [ ] 06-02: Finalize release checklist and docs QA
+- [x] 06-01: Define bundle structure and packaging steps
+- [x] 06-02: Finalize release checklist and docs QA
 
 ## Progress
 
@@ -118,4 +118,4 @@ Plans:
 | 3. n8n Workflow Packaging & Contract Alignment | 3/3 | Complete | 2026-02-18 |
 | 4. Smoke Verification Harness | 3/3 | Complete | 2026-02-19 |
 | 5. Troubleshooting & Diagnostics | 2/2 | Complete | 2026-03-06 |
-| 6. Distribution & Release Readiness | 0/2 | Not started | - |
+| 6. Distribution & Release Readiness | 2/2 | Complete | 2026-03-10 |
