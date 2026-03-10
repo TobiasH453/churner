@@ -16,6 +16,7 @@ USAGE
 
 failures=0
 archive_path=""
+RELEASE_TRACKED_FILES=()
 
 record_failure() {
   local message="$1"
@@ -38,6 +39,58 @@ require_executable() {
     record_failure "Missing executable bit: ${rel_path}"
   else
     print_pass "Executable ok: ${rel_path}"
+  fi
+}
+
+require_committed_path() {
+  local rel_path="$1"
+  if git -C "${REPO_ROOT}" cat-file -e "HEAD:${rel_path}" 2>/dev/null; then
+    print_pass "Committed at HEAD: ${rel_path}"
+  else
+    record_failure "Required release input is not committed at HEAD: ${rel_path}"
+  fi
+}
+
+collect_committed_dir_files() {
+  local dir_path="$1"
+  local tracked_files=()
+
+  if [[ ! -d "${REPO_ROOT}/${dir_path}" ]]; then
+    record_failure "Missing required directory: ${dir_path}"
+    return 0
+  fi
+
+  if ! git -C "${REPO_ROOT}" cat-file -e "HEAD:${dir_path}" 2>/dev/null; then
+    record_failure "Required release directory is not committed at HEAD: ${dir_path}"
+    return 0
+  fi
+
+  mapfile -t tracked_files < <(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD -- "${dir_path}")
+  if (( ${#tracked_files[@]} == 0 )); then
+    record_failure "Required release directory has no committed contents at HEAD: ${dir_path}"
+    return 0
+  fi
+
+  RELEASE_TRACKED_FILES+=("${tracked_files[@]}")
+  print_pass "Committed release directory contents found: ${dir_path}"
+}
+
+assert_clean_release_inputs() {
+  if (( ${#RELEASE_TRACKED_FILES[@]} == 0 )); then
+    record_failure "Release tracked input list is empty."
+    return 0
+  fi
+
+  if git -C "${REPO_ROOT}" diff --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
+    print_pass "Required release inputs are clean in the working tree."
+  else
+    record_failure "Required release inputs have uncommitted working-tree changes."
+  fi
+
+  if git -C "${REPO_ROOT}" diff --cached --quiet -- "${RELEASE_TRACKED_FILES[@]}"; then
+    print_pass "Required release inputs have no staged-only drift."
+  else
+    record_failure "Required release inputs have staged but uncommitted changes."
   fi
 }
 
@@ -91,6 +144,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+require_command "git" "Install git and rerun bash scripts/verify-release-readiness.sh" || exit 1
+
 print_info "Checking required release artifacts"
 for rel_path in \
   README.md \
@@ -115,6 +170,34 @@ done
 
 require_executable "scripts/build-release-bundle.sh"
 require_executable "scripts/verify-release-readiness.sh"
+
+print_info "Checking committed-source reproducibility gate"
+for rel_path in \
+  README.md \
+  install.sh \
+  requirements.txt \
+  ecosystem.config.js \
+  amazon_scraper.py \
+  browser_agent.py \
+  eb_contracts.py \
+  electronics_buyer.py \
+  electronics_buyer_llm.py \
+  main.py \
+  manual_login.py \
+  models.py \
+  runtime_checks.py \
+  stealth_utils.py \
+  utils.py \
+  .env.example; do
+  require_committed_path "${rel_path}"
+  RELEASE_TRACKED_FILES+=("${rel_path}")
+done
+
+for rel_path in docs scripts n8n-workflows; do
+  collect_committed_dir_files "${rel_path}"
+done
+
+assert_clean_release_inputs
 
 print_info "Checking README release flow"
 assert_contains "README.md" "## Supported Platform and Prerequisites"
@@ -154,6 +237,8 @@ assert_contains "docs/RELEASE.md" "bash scripts/build-release-bundle.sh --versio
 assert_contains "docs/RELEASE.md" "shared cloud folder"
 assert_contains "docs/RELEASE.md" ".env.example"
 assert_contains "docs/RELEASE.md" ".env"
+assert_contains "docs/RELEASE.md" "committed at `HEAD`"
+assert_contains "docs/RELEASE.md" "fail if any required release input is untracked"
 
 print_info "Checking release checklist gate"
 assert_contains "docs/RELEASE_CHECKLIST.md" "**Release version:**"

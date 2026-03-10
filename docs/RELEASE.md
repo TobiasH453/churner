@@ -29,6 +29,16 @@ Expected outputs:
 
 The build hard-fails if required inputs are missing, if the version is not `vX.Y.Z`, or if bundle audit fails.
 
+## Committed Source Gate
+
+Release packaging is intentionally tied to repository state, not a dirty workspace:
+
+- every required release input must already be committed at `HEAD`
+- the build and readiness checks fail if any required release input is untracked
+- the build and readiness checks fail if required release inputs have staged-only or working-tree drift
+
+This keeps the shipped `.zip` reproducible from committed source instead of silently packaging local-only files.
+
 ## What the Bundle Includes
 
 - Application code required for runtime
@@ -72,6 +82,7 @@ Only upload the `.zip` after:
 1. Bundle audit passes
 2. Release checklist is complete
 3. Release docs QA passes
+4. `bash scripts/verify-release-readiness.sh` passes on committed release inputs
 
 The file intended for users is the `.zip`, not the staged directory.
 
