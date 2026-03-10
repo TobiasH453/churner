@@ -3,12 +3,56 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ENV_FILE="${1:-${REPO_ROOT}/.env}"
+ENV_FILE="${REPO_ROOT}/.env"
+ALLOW_TEMPLATE_PLACEHOLDERS=0
+TEMPLATE_PENDING_EXIT=20
 
 errors=()
+placeholder_keys=()
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash scripts/validate-env.sh [--allow-template-placeholders] [path/to/.env]
+
+Options:
+  --allow-template-placeholders  Treat shipped placeholder values as "pending" instead of a hard failure.
+  --help, -h                     Show this help text.
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --allow-template-placeholders)
+      ALLOW_TEMPLATE_PLACEHOLDERS=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      ENV_FILE="$1"
+      shift
+      ;;
+  esac
+done
 
 append_error() {
   errors+=("$1")
+}
+
+append_placeholder_key() {
+  local key="$1"
+  local existing
+  if (( ${#placeholder_keys[@]} > 0 )); then
+    for existing in "${placeholder_keys[@]}"; do
+      if [[ "${existing}" == "${key}" ]]; then
+        return 0
+      fi
+    done
+  fi
+  placeholder_keys+=("${key}")
 }
 
 trim_value() {
@@ -23,6 +67,11 @@ trim_value() {
     fi
   fi
   echo "${raw}"
+}
+
+is_placeholder_value() {
+  local value="$1"
+  [[ "${value}" == replace-with-* ]]
 }
 
 get_env_key_value() {
@@ -49,6 +98,10 @@ validate_email_key() {
   local key="$1"
   local value
   value="$(get_env_key_value "${key}")"
+  if is_placeholder_value "${value}"; then
+    append_placeholder_key "${key}"
+    return 0
+  fi
   if [[ -n "${value}" && ! "${value}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]]; then
     append_error "Invalid format for ${key}. Expected an email-style value."
   fi
@@ -108,12 +161,27 @@ validate_anthropic_key() {
   if [[ -z "${value}" ]]; then
     return 0
   fi
+  if is_placeholder_value "${value}"; then
+    append_placeholder_key "ANTHROPIC_API_KEY"
+    return 0
+  fi
   if [[ ! "${value}" =~ ^sk-ant- ]]; then
     append_error "ANTHROPIC_API_KEY appears malformed. Expected prefix sk-ant-."
   fi
   if (( ${#value} < 40 )); then
     append_error "ANTHROPIC_API_KEY appears too short. Use a full Anthropic key."
   fi
+}
+
+collect_placeholder_required_keys() {
+  local key
+  local value
+  for key in "${required_keys[@]}"; do
+    value="$(get_env_key_value "${key}")"
+    if is_placeholder_value "${value}"; then
+      append_placeholder_key "${key}"
+    fi
+  done
 }
 
 if [[ ! -f "${ENV_FILE}" ]]; then
@@ -146,6 +214,24 @@ validate_port_key "SERVER_PORT"
 validate_port_key "N8N_PORT"
 validate_boolean_key "BROWSER_HEADLESS"
 validate_account_type_optional
+collect_placeholder_required_keys
+
+if (( ${#errors[@]} == 0 && ${#placeholder_keys[@]} > 0 )); then
+  if [[ "${ALLOW_TEMPLATE_PLACEHOLDERS}" -eq 1 ]]; then
+    echo "[WARN] Environment template still contains placeholder values for ${#placeholder_keys[@]} required key(s):"
+    for key in "${placeholder_keys[@]}"; do
+      echo "  - ${key}"
+    done
+    echo
+    echo "Edit .env locally, then rerun:"
+    echo "  bash scripts/validate-env.sh"
+    exit "${TEMPLATE_PENDING_EXIT}"
+  fi
+
+  for key in "${placeholder_keys[@]}"; do
+    append_error "Placeholder value still present for ${key}. Edit .env locally and rerun validation."
+  done
+fi
 
 if (( ${#errors[@]} > 0 )); then
   echo "[FAIL] Environment validation failed with ${#errors[@]} issue(s):"

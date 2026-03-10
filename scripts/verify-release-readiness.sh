@@ -51,6 +51,28 @@ assert_contains() {
   fi
 }
 
+assert_before() {
+  local rel_path="$1"
+  local first="$2"
+  local second="$3"
+  local first_line
+  local second_line
+
+  first_line="$(rg -n -F "${first}" "${REPO_ROOT}/${rel_path}" | head -n 1 | cut -d: -f1 || true)"
+  second_line="$(rg -n -F "${second}" "${REPO_ROOT}/${rel_path}" | head -n 1 | cut -d: -f1 || true)"
+
+  if [[ -z "${first_line}" || -z "${second_line}" ]]; then
+    record_failure "${rel_path} is missing ordering anchors: ${first} | ${second}"
+    return 0
+  fi
+
+  if (( first_line < second_line )); then
+    print_pass "${rel_path} order ok: ${first} before ${second}"
+  else
+    record_failure "${rel_path} has incorrect order: expected ${first} before ${second}"
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --archive)
@@ -107,6 +129,24 @@ assert_contains "README.md" "bash scripts/verify-runtime-operations.sh"
 assert_contains "README.md" "bash scripts/verify-n8n-workflow-contract.sh"
 assert_contains "README.md" "SMOKE_ORDER_NUMBER=111-2222222-3333333 bash scripts/verify-smoke-readiness.sh"
 assert_contains "README.md" "bash scripts/collect-diagnostics.sh"
+assert_contains "README.md" "Env Validation PASS"
+assert_contains "README.md" "Env Validation PENDING"
+assert_before "README.md" "bash install.sh" "bash scripts/validate-env.sh"
+assert_before "README.md" "bash scripts/validate-env.sh" "bash scripts/services-up.sh"
+
+print_info "Checking install/env sequencing docs"
+assert_contains "docs/INSTALL.md" "Env Validation PASS"
+assert_contains "docs/INSTALL.md" "Env Validation PENDING"
+assert_contains "docs/INSTALL.md" "bash scripts/validate-env.sh"
+assert_contains "docs/INSTALL.md" "bash scripts/services-up.sh"
+assert_before "docs/INSTALL.md" "bash install.sh" "bash scripts/validate-env.sh"
+assert_before "docs/INSTALL.md" "bash scripts/validate-env.sh" "bash scripts/services-up.sh"
+assert_contains "docs/ENVIRONMENT.md" "Env Validation PENDING"
+assert_contains "docs/ENVIRONMENT.md" "bash install.sh"
+assert_contains "docs/ENVIRONMENT.md" "bash scripts/validate-env.sh"
+assert_contains "docs/ENVIRONMENT.md" "bash scripts/services-up.sh"
+assert_before "docs/ENVIRONMENT.md" "bash install.sh" "bash scripts/validate-env.sh"
+assert_before "docs/ENVIRONMENT.md" "bash scripts/validate-env.sh" "bash scripts/services-up.sh"
 
 print_info "Checking release maintainer docs"
 assert_contains "docs/RELEASE.md" "macOS on Apple Silicon"
